@@ -3,6 +3,8 @@ package server
 import (
 	"fmt"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"io"
 	"net"
 	"strings"
 	"sync/atomic"
@@ -11,11 +13,8 @@ import (
 )
 
 func TestServe(t *testing.T) {
-	p, addr := getAddr()
-	server, err := Serve(p)
-	assert.NoError(t, err)
-
-	defer stop(server)
+	_, addr, stop := startTestServer()
+	defer stop()
 
 	conn, err := net.Dial("tcp", addr)
 	assert.NoError(t, err)
@@ -26,11 +25,8 @@ func TestServe(t *testing.T) {
 }
 
 func TestBroadcast(t *testing.T) {
-	p, addr := getAddr()
-	server, err := Serve(p)
-	assert.NoError(t, err)
-
-	defer stop(server)
+	_, addr, stop := startTestServer()
+	defer stop()
 
 	sender, err := net.Dial("tcp", addr)
 	assert.NoError(t, err)
@@ -63,11 +59,8 @@ func TestBroadcast(t *testing.T) {
 }
 
 func TestRemoveClosedConnection(t *testing.T) {
-	p, addr := getAddr()
-	server, err := Serve(p)
-	assert.NoError(t, err)
-
-	defer stop(server)
+	server, addr, stop := startTestServer()
+	defer stop()
 
 	conn, err := net.Dial("tcp", addr)
 	assert.NoError(t, err)
@@ -78,6 +71,108 @@ func TestRemoveClosedConnection(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	assert.Equal(t, 0, server.ConnectionCount())
+}
+
+func TestClientAuthenticationFail(t *testing.T) {
+	_, addr, stop := startTestServer()
+	defer stop()
+
+	client, err := net.Dial("tcp", addr)
+	assert.NoError(t, err)
+
+	_, err = client.Write([]byte("Hello"))
+	assert.NoError(t, err)
+
+	time.Sleep(10 * time.Millisecond)
+
+	res := make([]byte, 9)
+	_, err = client.Read(res)
+	assert.Equal(t, "auth fail", string(res))
+
+	_, err = client.Read(res)
+	assert.Error(t, err)
+	assert.Equal(t, io.EOF, err)
+}
+
+func TestClientAuthenticationSuccess(t *testing.T) {
+	_, addr, stop := startTestServer()
+	defer stop()
+
+	client, err := net.Dial("tcp", addr)
+	assert.NoError(t, err)
+
+	_, err = client.Write([]byte("test::123456"))
+	assert.NoError(t, err)
+
+	res := make([]byte, 12)
+	_, err = client.Read(res)
+	assert.Equal(t, "auth success", string(res))
+}
+
+func TestAuthCreds(t *testing.T) {
+	defer func() {
+		if e := recover(); e != nil {
+			t.Error(e)
+		}
+	}()
+
+	s := &Server{}
+
+	cases := []struct{
+		credsMessage []byte
+		username string
+		password string
+	}{
+		{
+			credsMessage: append([]byte("test::123123"), 0, 0),
+			username: "test",
+			password: "123123",
+		},
+		{
+			credsMessage: append([]byte{0}, []byte("test::123123")...),
+			username: "test",
+			password: "123123",
+		},
+		{
+			credsMessage: []byte("::"),
+			username: "",
+			password: "",
+		},
+		{
+			credsMessage: []byte(""),
+			username: "",
+			password: "",
+		},
+		{
+			credsMessage: []byte("te::st:123123"),
+			username: "te",
+			password: "st:123123",
+		},
+		{
+			credsMessage: []byte(":"),
+			username: "",
+			password: "",
+		},
+	}
+
+	for i, c := range cases {
+		username, password := s.authCreds(c.credsMessage)
+
+		require.Equal(t, c.username, username, "Test: %d", i + 1)
+		require.Equal(t, c.password, password, "Test: %d", i + 1)
+	}
+}
+
+func startTestServer() (s *Server, addr string, stopServer func()) {
+	p, addr := getAddr()
+	server, err := Serve(p)
+	if err != nil {
+		panic(err)
+	}
+
+	return server, addr, func() {
+		stop(server)
+	}
 }
 
 func stop(s *Server) {
