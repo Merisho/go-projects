@@ -1,4 +1,4 @@
-package server
+package connections
 
 import (
 	"net"

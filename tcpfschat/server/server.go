@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"errors"
+	"github.com/merisho/tcp-fs-chat/server/connections"
 	"log"
 	"net"
 	"strconv"
@@ -18,7 +19,7 @@ func Serve(port uint16) (*Server, error) {
 	s := &Server{
 		ln: listener,
 		Err: make(chan error),
-		conns: &Connections{},
+		conns: &connections.Connections{},
 	}
 	go s.serve()
 
@@ -28,7 +29,7 @@ func Serve(port uint16) (*Server, error) {
 type Server struct {
 	ln net.Listener
 	Err chan error
-	conns *Connections
+	conns *connections.Connections
 }
 
 func (s *Server) Close() error {
@@ -45,7 +46,6 @@ func (s *Server) serve() {
 		if err != nil {
 			s.Err <- err
 		} else {
-			s.conns.Add(conn)
 			go s.handleConnection(conn)
 		}
 	}
@@ -57,6 +57,8 @@ func (s *Server) handleConnection(conn net.Conn) {
 	if s.authenticate(conn) != nil {
 		return
 	}
+
+	s.conns.Add(conn)
 
 	for {
 		b := make([]byte, 1024)

@@ -6,7 +6,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"io"
 	"net"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -28,34 +27,22 @@ func TestBroadcast(t *testing.T) {
 	_, addr, stop := startTestServer()
 	defer stop()
 
-	sender, err := net.Dial("tcp", addr)
+	sender := createClient(addr, "sender")
+	receiver1 := createClient(addr, "receiver1")
+	receiver2 := createClient(addr, "receiver2")
+
+	_, err := sender.Write([]byte("hello"))
 	assert.NoError(t, err)
 
-	receiver1, err := net.Dial("tcp", addr)
-	assert.NoError(t, err)
+	res := make([]byte, 5)
 
-	receiver2, err := net.Dial("tcp", addr)
+	_, err = receiver1.Read(res)
 	assert.NoError(t, err)
+	assert.Equal(t, "hello", string(res))
 
-	time.Sleep(10 * time.Millisecond)
-
-	_, err = sender.Write([]byte("Hello test"))
+	_, err = receiver2.Read(res)
 	assert.NoError(t, err)
-
-	err = receiver1.SetDeadline(time.Now().Add(1 * time.Second))
-	assert.NoError(t, err)
-
-	b := make([]byte, 1024)
-	_, err = receiver1.Read(b)
-	assert.NoError(t, err)
-	assert.Equal(t, "Hello test", strings.TrimRight(string(b), "\x00"))
-
-	err = receiver2.SetDeadline(time.Now().Add(1 * time.Second))
-	assert.NoError(t, err)
-
-	_, err = receiver2.Read(b)
-	assert.NoError(t, err)
-	assert.Equal(t, "Hello test", strings.TrimRight(string(b), "\x00"))
+	assert.Equal(t, "hello", string(res))
 }
 
 func TestRemoveClosedConnection(t *testing.T) {
@@ -65,10 +52,17 @@ func TestRemoveClosedConnection(t *testing.T) {
 	conn, err := net.Dial("tcp", addr)
 	assert.NoError(t, err)
 
+	_, err = conn.Write([]byte("test::test"))
+	assert.NoError(t, err)
+
+	time.Sleep(10 * time.Millisecond)
+
+	assert.Equal(t, 1, server.ConnectionCount())
+
 	err = conn.Close()
 	assert.NoError(t, err)
 
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
 
 	assert.Equal(t, 0, server.ConnectionCount())
 }
@@ -202,4 +196,28 @@ func portGen() func() uint16 {
 
 		return uint16(atomic.AddUint32(&base, 1))
 	}
+}
+
+func createClient(addr, name string) net.Conn {
+	client, err := net.Dial("tcp", addr)
+	if err != nil {
+		panic(err)
+	}
+
+	_, err = client.Write([]byte(name + "::" + name))
+	if err != nil {
+		panic(err)
+	}
+
+	res := make([]byte, 12)
+	_, err = client.Read(res)
+	if err != nil {
+		panic(err)
+	}
+
+	if string(res) == "auth success" {
+		return client
+	}
+
+	panic(string(res))
 }
