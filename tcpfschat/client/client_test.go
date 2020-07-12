@@ -33,6 +33,27 @@ func TestReceiveMessage(t *testing.T) {
 	}
 }
 
+func TestAuth(t *testing.T) {
+	port, msgs := StartFakeServer()
+
+	c, err := client.Connect("localhost", port)
+	assert.NoError(t, err)
+
+	time.AfterFunc(10 * time.Millisecond, func() {
+		msgs <- "auth success"
+	})
+
+	err = c.Auth("test", "password")
+	assert.NoError(t, err)
+
+	time.AfterFunc(10 * time.Millisecond, func() {
+		msgs <- "auth fail"
+	})
+
+	err = c.Auth("test", "invalid_password")
+	assert.Error(t, err)
+}
+
 //func TestSendMessage(t *testing.T) {
 //	port, msgs, srvMsgs := StartFakeServer()
 //

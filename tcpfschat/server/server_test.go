@@ -34,15 +34,15 @@ func TestBroadcast(t *testing.T) {
 	_, err := sender.Write([]byte("hello"))
 	assert.NoError(t, err)
 
-	res := make([]byte, 5)
+	res := make([]byte, 14)
 
 	_, err = receiver1.Read(res)
 	assert.NoError(t, err)
-	assert.Equal(t, "hello", string(res))
+	assert.Equal(t, "[sender,hello]", string(res))
 
 	_, err = receiver2.Read(res)
 	assert.NoError(t, err)
-	assert.Equal(t, "hello", string(res))
+	assert.Equal(t, "[sender,hello]", string(res))
 }
 
 func TestRemoveClosedConnection(t *testing.T) {

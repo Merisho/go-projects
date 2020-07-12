@@ -15,9 +15,16 @@ func main() {
 		panic(err)
 	}
 
+	username := readLine()
+	password := readLine()
+	err = c.Auth(username, password)
+	if err != nil {
+		panic(err)
+	}
+
 	go func() {
-		r := c.Receive()
-		for msg := range r {
+		msgs := c.Receive()
+		for msg := range msgs {
 			fmt.Println(msg)
 		}
 	}()
@@ -29,8 +36,16 @@ func main() {
 			panic(err)
 		}
 
-		fmt.Println(b)
-
 		c.Send(string(b))
 	}
+}
+
+func readLine() string {
+	r := bufio.NewReader(os.Stdin)
+	b, _, err := r.ReadLine()
+	if err != nil {
+		panic(err)
+	}
+
+	return string(b)
 }

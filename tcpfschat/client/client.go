@@ -1,9 +1,11 @@
 package client
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"strings"
+	"time"
 )
 
 func Connect(host string, port uint16) (*Client, error) {
@@ -40,5 +42,19 @@ func (c *Client) Send(msg string) {
 	_, err := c.conn.Write([]byte(msg))
 	if err != nil {
 		panic(err)
+	}
+}
+
+func (c *Client) Auth(username, password string) error {
+	c.Send(fmt.Sprintf("%s::%s", username, password))
+	select {
+	case res := <- c.Receive():
+		if res == "auth success" {
+			return nil
+		}
+
+		return errors.New(res)
+	case <- time.After(1 * time.Second):
+		return errors.New("timeout")
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"errors"
+	"fmt"
 	"github.com/merisho/tcp-fs-chat/server/connections"
 	"log"
 	"net"
@@ -54,7 +55,8 @@ func (s *Server) serve() {
 func (s *Server) handleConnection(conn net.Conn) {
 	r := bufio.NewReader(conn)
 
-	if s.authenticate(conn) != nil {
+	username, err := s.authenticate(conn)
+	if err != nil {
 		return
 	}
 
@@ -75,31 +77,39 @@ func (s *Server) handleConnection(conn net.Conn) {
 			break
 		}
 
-		err = s.conns.Broadcast(b)
+		msg := s.formatMessage(username, b)
+		err = s.conns.BroadcastFrom(conn, msg)
 		if err != nil {
 			log.Println(err)
 		}
 	}
 }
 
-func (s *Server) authenticate(conn net.Conn) error {
+func (s *Server) formatMessage(username string, b []byte) []byte {
+	m := bytes.Replace(b, []byte{0}, []byte{}, -1)
+	msg := fmt.Sprintf("[%s,%s]", username, string(m))
+
+	return []byte(msg)
+}
+
+func (s *Server) authenticate(conn net.Conn) (string, error) {
 	b := make([]byte, 1024)
 	_, err := conn.Read(b)
 	if err != nil {
-		return s.failAuth(conn)
+		return "", s.failAuth(conn)
 	}
 
 	username, password := s.authCreds(b)
 	if username == "" || password == "" {
-		return s.failAuth(conn)
+		return "", s.failAuth(conn)
 	}
 
 	_, err = conn.Write([]byte("auth success"))
 	if err != nil {
-		return s.failAuth(conn)
+		return "", s.failAuth(conn)
 	}
 
-	return nil
+	return username, nil
 }
 
 func (s *Server) authCreds(msg []byte) (username, password string) {
