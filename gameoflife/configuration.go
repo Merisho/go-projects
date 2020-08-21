@@ -13,9 +13,9 @@ const (
     delayBetweenGenerations = 50 * time.Millisecond
 )
 
-// This field is exactly of the size defined in the constant named size, namely it is size height by size width
-// The size of the two-dimensional configuration can be any
-// If it doesn't fit into the size defined, it will be trimmed and all set live cells that has coordinates bigger than size will not be displayed, but will exist in memory anyway
+// This field may not be exactly of the size defined in the constant named "size"
+// The size of this configuration can be any
+// If it doesn't fit into the size defined, it will be trimmed and all live cells that has coordinates greater than size or less than 0 will not be displayed, but will exist in memory anyway
 
 // In order to mark a cell as live, use any character other than dot (.) and blank character, dot means a cell is dead
 var configuration = [][]rune{
