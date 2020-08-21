@@ -66,8 +66,8 @@ func makeConfiguration() gameoflife.Cells {
     for i, row := range configuration {
         for j, cell := range row {
             if cell != '.' {
-                x := int64(j % size)
-                y := int64(i % size)
+                x := int64(j)
+                y := int64(i)
                 conf = append(conf, gameoflife.Cell{x, y})
             }
         }
