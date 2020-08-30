@@ -1,64 +1,78 @@
 package client_test
 
 import (
-	"github.com/merisho/tcp-fs-chat/client"
-	"github.com/stretchr/testify/assert"
-	"testing"
-	"time"
+    "github.com/merisho/tcp-fs-chat/client"
+    "github.com/stretchr/testify/assert"
+    "testing"
+    "time"
 )
 
-func TestClientConnect(t *testing.T) {
-	port, _ := StartFakeServer()
-
-	c, err := client.Connect("localhost", port)
-	assert.NoError(t, err)
-	assert.NotNil(t, c)
-}
-
 func TestReceiveMessage(t *testing.T) {
-	port, msgs := StartFakeServer()
+    conn := NewTestConnection()
+    c := client.New(conn)
 
-	c, err := client.Connect("localhost", port)
-	assert.NoError(t, err)
+    r := c.Receive()
+    conn.chunksToRead("Hello")
 
-	r := c.Receive()
-
-	msgs <- "Hello test"
-
-	select {
-	case m := <- r:
-		assert.Equal(t, "Hello test", m)
-	case <- time.After(300 * time.Millisecond):
-		assert.Fail(t, "timeout")
-	}
+    chanMessageEqual(t, r, "Hello")
 }
 
-func TestAuth(t *testing.T) {
-	port, msgs := StartFakeServer()
+func TestSkipNotReadyReceiver(t *testing.T) {
+    conn := NewTestConnection()
+    c := client.New(conn)
 
-	c, err := client.Connect("localhost", port)
-	assert.NoError(t, err)
+    _ = c.Receive()
+    ready := c.Receive()
+    conn.chunksToRead("Hello")
 
-	time.AfterFunc(10 * time.Millisecond, func() {
-		msgs <- "auth success"
-	})
-
-	err = c.Auth("test", "password")
-	assert.NoError(t, err)
-
-	time.AfterFunc(10 * time.Millisecond, func() {
-		msgs <- "auth fail"
-	})
-
-	err = c.Auth("test", "invalid_password")
-	assert.Error(t, err)
+    chanMessageEqual(t, ready, "Hello")
 }
 
-//func TestSendMessage(t *testing.T) {
-//	port, msgs, srvMsgs := StartFakeServer()
-//
-//	c, err := client.Connect("localhost", port)
-//	assert.NoError(t, err)
-//
-//	c.Send("test")
-//}
+func TestRetryDeliveryToNotReadyReceiver(t *testing.T) {
+    conn := NewTestConnection()
+    c := client.New(conn)
+
+    notReady := c.Receive()
+    ready := c.Receive()
+    conn.chunksToRead("Hello")
+
+    chanMessageEqual(t, ready, "Hello")
+    chanMessageEqual(t, notReady, "Hello")
+}
+
+func TestRemoveNotReadyReceiversAfterDeliveryRetryTimeout(t *testing.T) {
+    conn := NewTestConnection()
+    c := client.New(conn)
+
+    notReady := c.Receive()
+    conn.chunksToRead("Hello")
+
+    time.Sleep(15 * time.Millisecond)
+
+    conn.chunksToRead("Hello")
+
+    select {
+    case <- time.After(10 * time.Millisecond):
+    case _, ok := <- notReady:
+        assert.False(t, ok, "must NOT receive the 'Hello' message, but instead a channel closing signal")
+    }
+}
+
+func TestSendMessage(t *testing.T) {
+    conn := NewTestConnection()
+    c := client.New(conn)
+
+    err := c.Send("Hello")
+    assert.NoError(t, err)
+
+    assert.Equal(t, "Hello", conn.frontWrittenChunk())
+}
+
+func chanMessageEqual(t *testing.T, c chan string, expected string) {
+    select {
+    case m := <- c:
+        assert.Equal(t, expected, m)
+    case <- time.After(5 * time.Millisecond):
+        assert.Fail(t, "timeout")
+    }
+}

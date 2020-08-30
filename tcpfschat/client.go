@@ -7,17 +7,8 @@ import (
 	"os"
 )
 
-type obj struct {}
-
 func main() {
-	c, err := client.Connect("localhost", 1337)
-	if err != nil {
-		panic(err)
-	}
-
-	username := readLine()
-	password := readLine()
-	err = c.Auth(username, password)
+	c, err := client.ConnectTCP("localhost", 1337)
 	if err != nil {
 		panic(err)
 	}
@@ -36,7 +27,10 @@ func main() {
 			panic(err)
 		}
 
-		c.Send(string(b))
+		err = c.Send(string(b))
+		if err != nil {
+			panic(err)
+		}
 	}
 }
 

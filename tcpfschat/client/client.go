@@ -1,60 +1,130 @@
 package client
 
 import (
-	"errors"
-	"fmt"
-	"net"
+	"io"
+	"log"
 	"strings"
 	"time"
 )
 
-func Connect(host string, port uint16) (*Client, error) {
-	addr := fmt.Sprintf("%s:%d", host, port)
-	conn, err := net.Dial("tcp", addr)
-	if err != nil {
-		return nil, err
+const (
+	sendMessageCmd commandType = iota
+	addReceiverCmd
+	removeReceiverCmd
+)
+
+func New(conn io.ReadWriteCloser) Client {
+	c := Client{
+		conn: conn,
+		receiversCommands: make(chan command),
 	}
 
-	return &Client{
-		conn: conn,
-	}, nil
+	c.commandHandlers = map[commandType]func(command){
+		sendMessageCmd: c.sendMessage,
+		addReceiverCmd: c.addReceiver,
+		removeReceiverCmd: c.removeReceiver,
+	}
+
+	<- c.handleReceiversCommands()
+	<- c.readMessages()
+
+	return c
 }
+
+type command struct {
+	cmdType commandType
+	payload interface{}
+}
+
+type commandType int
 
 type Client struct {
-	conn net.Conn
+	conn      io.ReadWriteCloser
+	receivers []chan string
+	receiversCommands chan command
+	commandHandlers map[commandType]func(command)
 }
 
-func (c *Client) Receive() chan string {
-	msgs := make(chan string, 4096)
+func (c *Client) handleReceiversCommands() chan struct{} {
+	ready := make(chan struct{})
 
 	go func() {
-		for {
-			b := make([]byte, 1024)
-			_, _ = c.conn.Read(b)
-			msgs <- strings.TrimRight(string(b), "\x00")
+		close(ready)
+		for cmd := range c.receiversCommands {
+			c.commandHandlers[cmd.cmdType](cmd)
 		}
 	}()
 
-	return msgs
+	return ready
 }
 
-func (c *Client) Send(msg string) {
-	_, err := c.conn.Write([]byte(msg))
-	if err != nil {
-		panic(err)
-	}
-}
-
-func (c *Client) Auth(username, password string) error {
-	c.Send(fmt.Sprintf("%s::%s", username, password))
-	select {
-	case res := <- c.Receive():
-		if res == "auth success" {
-			return nil
+func (c *Client) removeReceiver(cmd command) {
+	r := cmd.payload.(chan string)
+	var i int
+	for i = range c.receivers {
+		if c.receivers[i] == r {
+			break
 		}
-
-		return errors.New(res)
-	case <- time.After(1 * time.Second):
-		return errors.New("timeout")
 	}
+	close(r)
+	c.receivers = append(c.receivers[:i], c.receivers[i + 1:]...)
+}
+
+func (c *Client) addReceiver(cmd command) {
+	r := cmd.payload.(chan string)
+	c.receivers = append(c.receivers, r)
+	r <- "ok"
+}
+
+func (c *Client) sendMessage(cmd command) {
+	msg := cmd.payload.(string)
+	for _, r := range c.receivers {
+		select {
+		case r <- msg:
+		default:
+			c.retryMsg(msg, r)
+		}
+	}
+}
+
+func (c *Client) retryMsg(msg string, r chan string) {
+	go func() {
+		select {
+		case r <- msg:
+		case <- time.After(10 * time.Millisecond):
+			c.receiversCommands <- command{removeReceiverCmd, r}
+		}
+	}()
+}
+
+func (c *Client) readMessages() chan struct{} {
+	ready := make(chan struct{})
+
+	go func() {
+		close(ready)
+		for {
+			b := make([]byte, 8192)
+			_, err := c.conn.Read(b)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+
+			c.receiversCommands <- command{sendMessageCmd, strings.Trim(string(b), "\x00")}
+		}
+	}()
+
+	return ready
+}
+
+func (c *Client) Receive() chan string {
+	r := make(chan string)
+	c.receiversCommands <- command{addReceiverCmd, r}
+	<-r
+	return r
+}
+
+func (c *Client) Send(msg string) error {
+	_, err := c.conn.Write([]byte(msg))
+	return err
 }
