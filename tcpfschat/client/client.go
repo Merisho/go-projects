@@ -3,7 +3,6 @@ package client
 import (
 	"io"
 	"log"
-	"strings"
 	"time"
 )
 
@@ -104,13 +103,13 @@ func (c *Client) readMessages() chan struct{} {
 		close(ready)
 		for {
 			b := make([]byte, 8192)
-			_, err := c.conn.Read(b)
+			n, err := c.conn.Read(b)
 			if err != nil {
 				log.Println(err)
 				continue
 			}
 
-			c.receiversCommands <- command{sendMessageCmd, strings.Trim(string(b), "\x00")}
+			c.receiversCommands <- command{sendMessageCmd, b[:n]}
 		}
 	}()
 

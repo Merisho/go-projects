@@ -1,131 +1,59 @@
 package server
 
 import (
-	"fmt"
+	"github.com/merisho/tcp-fs-chat/test"
 	"github.com/stretchr/testify/assert"
 	"net"
-	"sync/atomic"
 	"testing"
-	"time"
 )
 
-func TestServe(t *testing.T) {
-	_, addr, stop := startTestServer()
-	defer stop()
-
-	conn, err := net.Dial("tcp", addr)
-	assert.NoError(t, err)
-
-	n, err := conn.Write([]byte("Hello"))
-	assert.NoError(t, err)
-	assert.Equal(t, 5, n)
-}
-
-func TestBroadcast(t *testing.T) {
-	_, addr, stop := startTestServer()
-	defer stop()
-
-	sender := createClient(addr, "sender")
-	receiver1 := createClient(addr, "receiver1")
-	receiver2 := createClient(addr, "receiver2")
-
-	_, err := sender.Write([]byte("hello"))
-	assert.NoError(t, err)
-
-	res := make([]byte, 14)
-
-	_, err = receiver1.Read(res)
-	assert.NoError(t, err)
-	assert.Equal(t, "[sender,hello]", string(res))
-
-	_, err = receiver2.Read(res)
-	assert.NoError(t, err)
-	assert.Equal(t, "[sender,hello]", string(res))
-}
-
-func TestRemoveClosedConnection(t *testing.T) {
-	server, addr, stop := startTestServer()
-	defer stop()
-
-	conn, err := net.Dial("tcp", addr)
-	assert.NoError(t, err)
-
-	_, err = conn.Write([]byte("test::test"))
-	assert.NoError(t, err)
-
-	time.Sleep(10 * time.Millisecond)
-
-	assert.Equal(t, 1, server.ConnectionCount())
-
-	err = conn.Close()
-	assert.NoError(t, err)
-
-	time.Sleep(10 * time.Millisecond)
-
-	assert.Equal(t, 0, server.ConnectionCount())
-}
-
-func startTestServer() (s *Server, addr string, stopServer func()) {
-	p, addr := getAddr()
-	server, err := Serve(p)
-	if err != nil {
-		panic(err)
-	}
-
-	return server, addr, func() {
-		stop(server)
+func NewTestListener() *TestListener {
+	return &TestListener{
+		acceptConnections: make(chan net.Conn, 4096),
 	}
 }
 
-func stop(s *Server) {
-	if err := recover(); err != nil {
-		fmt.Println(err)
-	}
+type TestListener struct {
+	acceptConnections chan net.Conn
+}
 
-	err := s.Close()
-	if err != nil {
-		panic(err)
+func (l *TestListener) connectionsToAccept(conns ...net.Conn) {
+	for _, c := range conns {
+		l.acceptConnections <- c
 	}
 }
 
-var port = portGen()
-
-func getAddr() (uint16, string) {
-	p := port()
-	return p, fmt.Sprintf("localhost:%d", p)
+func (l *TestListener) Accept() (net.Conn, error) {
+	return <- l.acceptConnections, nil
 }
 
-func portGen() func() uint16 {
-	base := uint32(1336)
-	return func() uint16 {
-		if base == 65535 {
-			panic("port out of range")
-		}
-
-		return uint16(atomic.AddUint32(&base, 1))
-	}
+func (l *TestListener) Close() error {
+	return nil
 }
 
-func createClient(addr, name string) net.Conn {
-	client, err := net.Dial("tcp", addr)
-	if err != nil {
-		panic(err)
-	}
+func (l *TestListener) Addr() net.Addr {
+	return nil
+}
 
-	_, err = client.Write([]byte(name + "::" + name))
-	if err != nil {
-		panic(err)
-	}
+func TestAcceptClient(t *testing.T) {
+	ln := NewTestListener()
+	ln.connectionsToAccept(test.NewTestConnection())
 
-	res := make([]byte, 12)
-	_, err = client.Read(res)
-	if err != nil {
-		panic(err)
-	}
+	s := NewServer(ln)
 
-	if string(res) == "auth success" {
-		return client
-	}
+	assert.Equal(t, 1, s.ConnectionCount())
+}
 
-	panic(string(res))
+func TestBroadcastMessage(t *testing.T) {
+	ln := NewTestListener()
+	sender := test.NewTestConnection()
+	receiver1 := test.NewTestConnection()
+	receiver2 := test.NewTestConnection()
+	ln.connectionsToAccept(sender, receiver1, receiver2)
+
+	s := NewServer(ln)
+	s.broadcast(sender, []byte("Hello"))
+
+	assert.Equal(t, "Hello", receiver1.FrontWrittenChunk())
+	assert.Equal(t, "Hello", receiver2.FrontWrittenChunk())
 }

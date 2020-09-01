@@ -1,86 +1,71 @@
 package server
 
 import (
-	"bufio"
-	"bytes"
-	"fmt"
-	"github.com/merisho/tcp-fs-chat/server/connections"
-	"log"
-	"net"
-	"strconv"
+    "github.com/merisho/tcp-fs-chat/server/connections"
+    "log"
+    "net"
 )
 
-func Serve(port uint16) (*Server, error) {
-	listener, err := net.Listen("tcp", ":" + strconv.FormatUint(uint64(port), 10))
-	if err != nil {
-		return nil, err
-	}
+func NewServer(ln net.Listener) Server {
+    s := Server{
+        ln: ln,
+        conns: connections.Connections{},
+    }
 
-	s := &Server{
-		ln: listener,
-		Err: make(chan error),
-		conns: &connections.Connections{},
-	}
-	go s.serve()
+    s.start()
 
-	return s, nil
+    return s
 }
 
 type Server struct {
-	ln net.Listener
-	Err chan error
-	conns *connections.Connections
+    ln net.Listener
+    conns connections.Connections
 }
 
-func (s *Server) Close() error {
-	return s.ln.Close()
+func (s *Server) start() *Server {
+    ready := make(chan struct{})
+    go func() {
+        close(ready)
+        for {
+            c, err := s.ln.Accept()
+            if err != nil {
+                log.Println(err)
+                continue
+            }
+
+            s.handleConnection(c)
+        }
+    }()
+
+    <- ready
+
+    return s
+}
+
+func (s *Server) handleConnection(c net.Conn) {
+    s.conns.Add(c)
+
+    go func() {
+        b := make([]byte, 1024)
+        for {
+            n, err := c.Read(b)
+            if err != nil {
+                log.Println(err)
+                continue
+            }
+
+            s.broadcast(c, b[:n])
+        }
+    }()
+}
+
+func (s *Server) broadcast(c net.Conn, msg []byte) {
+    err := s.conns.BroadcastFrom(c, msg)
+    if err != nil {
+        log.Println(err)
+    }
 }
 
 func (s *Server) ConnectionCount() int {
-	return s.conns.Count()
-}
-
-func (s *Server) serve() {
-	for {
-		conn, err := s.ln.Accept()
-		if err != nil {
-			s.Err <- err
-		} else {
-			go s.handleConnection(conn)
-		}
-	}
-}
-
-func (s *Server) handleConnection(conn net.Conn) {
-	s.conns.Add(conn)
-
-	r := bufio.NewReader(conn)
-	for {
-		b := make([]byte, 1024)
-		_, err := r.Read(b)
-		if err != nil {
-			s.conns.Remove(conn)
-			err := conn.Close()
-			if err != nil {
-				log.Println(err)
-			}
-
-			s.Err <- err
-
-			break
-		}
-
-		msg := s.formatMessage("", b)
-		err = s.conns.BroadcastFrom(conn, msg)
-		if err != nil {
-			log.Println(err)
-		}
-	}
-}
-
-func (s *Server) formatMessage(username string, b []byte) []byte {
-	m := bytes.Replace(b, []byte{0}, []byte{}, -1)
-	msg := fmt.Sprintf("[%s,%s]", username, string(m))
-
-	return []byte(msg)
+    return s.conns.Count()
 }
