@@ -6,7 +6,7 @@ import (
     "net"
 )
 
-func NewServer(ln net.Listener) Server {
+func NewServer(ln net.Listener) *Server {
     s := Server{
         ln: ln,
         conns: connections.Connections{},
@@ -14,7 +14,7 @@ func NewServer(ln net.Listener) Server {
 
     s.start()
 
-    return s
+    return &s
 }
 
 type Server struct {
@@ -46,12 +46,12 @@ func (s *Server) handleConnection(c net.Conn) {
     s.conns.Add(c)
 
     go func() {
-        b := make([]byte, 1024)
+        defer c.Close()
+        b := make([]byte, 1024 * 1024)
         for {
             n, err := c.Read(b)
-            if err != nil {
-                log.Println(err)
-                continue
+            if !s.conns.HandleConnectionErr(c, err) {
+                return
             }
 
             s.broadcast(c, b[:n])

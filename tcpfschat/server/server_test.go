@@ -5,6 +5,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"net"
 	"testing"
+	"time"
 )
 
 func NewTestListener() *TestListener {
@@ -47,13 +48,26 @@ func TestAcceptClient(t *testing.T) {
 func TestBroadcastMessage(t *testing.T) {
 	ln := NewTestListener()
 	sender := test.NewTestConnection()
+	sender.ChunksToRead("Hello")
 	receiver1 := test.NewTestConnection()
 	receiver2 := test.NewTestConnection()
 	ln.connectionsToAccept(sender, receiver1, receiver2)
 
-	s := NewServer(ln)
-	s.broadcast(sender, []byte("Hello"))
+	NewServer(ln)
+	time.Sleep(1 * time.Millisecond)
 
 	assert.Equal(t, "Hello", receiver1.FrontWrittenChunk())
 	assert.Equal(t, "Hello", receiver2.FrontWrittenChunk())
+}
+
+func TestHandleConnectionClosing(t *testing.T) {
+	ln := NewTestListener()
+	conn := test.NewTestConnection().EOFOnRead()
+	ln.connectionsToAccept(conn)
+
+	s := NewServer(ln)
+	time.Sleep(1 * time.Millisecond)
+
+	assert.Equal(t, 0, s.ConnectionCount())
+	assert.True(t, conn.Closed())
 }

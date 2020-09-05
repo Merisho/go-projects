@@ -1,6 +1,7 @@
 package connections
 
 import (
+	"io"
 	"net"
 	"sync"
 )
@@ -58,4 +59,17 @@ func (conns *Connections) Count() int {
 	conns.mu.Lock()
 	defer conns.mu.Unlock()
 	return len(conns.conns)
+}
+
+func (conns *Connections) HandleConnectionErr(c net.Conn, err error) (connectionOk bool) {
+	if err == nil {
+		return true
+	}
+
+	if err == io.EOF {
+		conns.Remove(c)
+		return false
+	}
+
+	return true
 }
