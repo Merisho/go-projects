@@ -60,9 +60,11 @@ func (s *Server) handleConnection(c net.Conn) {
 }
 
 func (s *Server) broadcast(c net.Conn, msg []byte) {
-    err := s.conns.BroadcastFrom(c, msg)
-    if err != nil {
-        log.Println(err)
+    errs := s.conns.BroadcastFrom(c, msg)
+    if len(errs) != 0 {
+        for _, e := range errs {
+            log.Println(e.Err.Error())
+        }
     }
 }
 

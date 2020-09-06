@@ -7,6 +7,19 @@ import (
 	"testing"
 )
 
+type TestErr struct {
+	Temp bool
+	Err string
+}
+
+func (e TestErr) Temporary() bool {
+	return e.Temp
+}
+
+func (e TestErr) Error() string {
+	return e.Err
+}
+
 func TestConnectionsBroadcast(t *testing.T) {
 	conns := &Connections{}
 
@@ -19,9 +32,9 @@ func TestConnectionsBroadcast(t *testing.T) {
 	conns.Add(conn3)
 
 	msg := "test"
-	err := conns.Broadcast([]byte(msg))
+	errs := conns.Broadcast([]byte(msg))
 
-	assert.NoError(t, err)
+	assert.Empty(t, errs)
 	assert.Equal(t, msg, conn1.FrontWrittenChunk())
 	assert.Equal(t, msg, conn2.FrontWrittenChunk())
 	assert.Equal(t, msg, conn3.FrontWrittenChunk())
@@ -39,12 +52,25 @@ func TestConnectionsBroadcastFrom(t *testing.T) {
 	conns.Add(conn3)
 
 	msg := "test"
-	err := conns.BroadcastFrom(conn1, []byte(msg))
+	errs := conns.BroadcastFrom(conn1, []byte(msg))
 
-	assert.NoError(t, err)
+	assert.Empty(t, errs)
 	assert.Equal(t, "", conn1.FrontWrittenChunk())
 	assert.Equal(t, msg, conn2.FrontWrittenChunk())
 	assert.Equal(t, msg, conn3.FrontWrittenChunk())
+}
+
+func TestBroadcastErrors(t *testing.T) {
+	conns := &Connections{}
+
+	conn1 := test.NewTestConnection().ErrorOnWrite()
+	conn2 := test.NewTestConnection().ErrorOnWrite()
+	conns.Add(conn1)
+	conns.Add(conn2)
+
+	connErrs := conns.Broadcast([]byte("Hello"))
+
+	assert.Equal(t, 2, len(connErrs))
 }
 
 func TestRemoveConnection(t *testing.T) {
@@ -74,4 +100,15 @@ func TestHandleNilConnectionError(t *testing.T) {
 	connOk := conns.HandleConnectionErr(nil, nil)
 
 	assert.True(t, connOk)
+}
+
+func TestHandleNonTemporaryError(t *testing.T) {
+	conns := &Connections{}
+	conn := test.NewTestConnection()
+	conns.Add(conn)
+
+	connOk := conns.HandleConnectionErr(conn, TestErr{})
+
+	assert.False(t, connOk)
+	assert.Equal(t, 0, conns.Count())
 }

@@ -1,6 +1,7 @@
 package test
 
 import (
+    "errors"
     "io"
     "net"
     "time"
@@ -18,6 +19,7 @@ type TestConnection struct {
     readChunks    chan string
     writtenChunks chan string
     closed        chan struct{}
+    writeError    error
 }
 
 func (c *TestConnection) ChunksToRead(chunks ...string) {
@@ -28,6 +30,11 @@ func (c *TestConnection) ChunksToRead(chunks ...string) {
 
 func (c *TestConnection) EOFOnRead() *TestConnection {
     close(c.readChunks)
+    return c
+}
+
+func (c *TestConnection) ErrorOnWrite() *TestConnection {
+    c.writeError = errors.New("some network error")
     return c
 }
 
@@ -51,6 +58,10 @@ func (c *TestConnection) Read(b []byte) (int, error) {
 }
 
 func (c *TestConnection) Write(b []byte) (int, error) {
+    if c.writeError != nil {
+        return 0, c.writeError
+    }
+
     c.writtenChunks <- string(b)
     return len(b), nil
 }

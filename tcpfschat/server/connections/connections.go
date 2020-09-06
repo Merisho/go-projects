@@ -28,31 +28,34 @@ func (conns *Connections) Remove(c net.Conn) {
 	}
 }
 
-func (conns *Connections) Broadcast(b []byte) error {
+func (conns *Connections) Broadcast(b []byte) []ConnErr {
 	return conns.broadcastFrom(nil, b)
 }
 
-func (conns *Connections) BroadcastFrom(from net.Conn, b []byte) error {
+func (conns *Connections) BroadcastFrom(from net.Conn, b []byte) []ConnErr {
 	return conns.broadcastFrom(from, b)
 }
 
-func (conns *Connections) broadcastFrom(from net.Conn, b []byte) error {
+func (conns *Connections) broadcastFrom(from net.Conn, b []byte) []ConnErr {
 	conns.mu.Lock()
 	defer conns.mu.Unlock()
 
-	var err error
+	var errs []ConnErr
 	for _, c := range conns.conns {
 		if c == from {
 			continue
 		}
 
-		_, e := c.Write(b)
-		if e != nil {
-			err = e
+		_, err := c.Write(b)
+		if err != nil {
+			errs = append(errs, ConnErr{
+				Conn: c,
+				Err: err,
+			})
 		}
 	}
 
-	return err
+	return errs
 }
 
 func (conns *Connections) Count() int {
@@ -71,5 +74,19 @@ func (conns *Connections) HandleConnectionErr(c net.Conn, err error) (connection
 		return false
 	}
 
+	if e, ok := err.(net.Error); ok {
+		if e.Temporary() {
+			return true
+		}
+
+		conns.Remove(c)
+		return false
+	}
+
 	return true
+}
+
+type ConnErr struct {
+	Conn net.Conn
+	Err error
 }
