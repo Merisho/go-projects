@@ -76,7 +76,8 @@ func (c *Client) addReceiver(cmd command) {
 }
 
 func (c *Client) sendMessage(cmd command) {
-	msg := cmd.payload.(string)
+	rawMsg := cmd.payload.([]byte)
+	msg := string(rawMsg)
 	for _, r := range c.receivers {
 		select {
 		case r <- msg:
