@@ -9,6 +9,7 @@ import (
 
 type TestErr struct {
 	Temp bool
+	Time bool
 	Err string
 }
 
@@ -18,6 +19,10 @@ func (e TestErr) Temporary() bool {
 
 func (e TestErr) Error() string {
 	return e.Err
+}
+
+func (e TestErr) Timeout() bool {
+	return e.Time
 }
 
 func TestConnectionsBroadcast(t *testing.T) {
@@ -108,6 +113,28 @@ func TestHandleNonTemporaryError(t *testing.T) {
 	conns.Add(conn)
 
 	connOk := conns.HandleConnectionErr(conn, TestErr{})
+
+	assert.False(t, connOk)
+	assert.Equal(t, 0, conns.Count())
+}
+
+func TestHandleTemporaryError(t *testing.T) {
+	conns := &Connections{}
+	conn := test.NewTestConnection()
+	conns.Add(conn)
+
+	connOk := conns.HandleConnectionErr(conn, TestErr{Temp: true})
+
+	assert.True(t, connOk)
+	assert.Equal(t, 1, conns.Count())
+}
+
+func TestHandleTimeoutError(t *testing.T) {
+	conns := &Connections{}
+	conn := test.NewTestConnection()
+	conns.Add(conn)
+
+	connOk := conns.HandleConnectionErr(conn, TestErr{Time: true})
 
 	assert.False(t, connOk)
 	assert.Equal(t, 0, conns.Count())

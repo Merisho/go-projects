@@ -14,7 +14,7 @@ func TestAuth(t *testing.T) {
 	err := a.Auth(username, pass)
 	assert.NoError(t, err)
 
-	err = a.Auth(username, "sfsdfgsdfg")
+	err = a.Auth(username, "wrong_password")
 	assert.Equal(t, errors.New("wrong password"), err)
 
 	err = a.Auth(username, pass)
