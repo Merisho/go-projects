@@ -12,5 +12,11 @@ func ConnectTCP(host string, port uint16) (Client, error) {
         return Client{}, err
     }
 
-    return New(conn), nil
+    id := make([]byte, 128)
+    n, err := conn.Read(id)
+    if err != nil {
+        return Client{}, err
+    }
+
+    return New(conn, id[:n]), nil
 }

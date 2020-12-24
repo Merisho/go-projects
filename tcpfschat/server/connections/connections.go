@@ -1,42 +1,58 @@
 package connections
 
 import (
+	"bytes"
 	"io"
 	"net"
 	"sync"
+	"github.com/google/uuid"
 )
 
 type Connections struct {
-	conns []net.Conn
+	conns []Conn
 	mu sync.Mutex
 }
 
-func (conns *Connections) Add(c net.Conn) {
+func (conns *Connections) Add(c net.Conn) (conn Conn, err error) {
+	uid, err := uuid.NewRandom()
+	if err != nil {
+		return nil, err
+	}
+
+	conn = newConnection(c, uid[:])
+
 	conns.mu.Lock()
-	conns.conns = append(conns.conns, c)
+	conns.conns = append(conns.conns, conn)
 	conns.mu.Unlock()
+
+	return conn, nil
 }
 
-func (conns *Connections) Remove(c net.Conn) {
+func (conns *Connections) RemoveByID(id []byte) Conn {
 	conns.mu.Lock()
 	defer conns.mu.Unlock()
+
+	var removed Conn
 	for i, conn := range conns.conns {
-		if conn == c {
+		if bytes.Equal(conn.ID(), id) {
+			removed = conn
 			conns.conns = append(conns.conns[:i], conns.conns[i + 1:]...)
 			break
 		}
 	}
+
+	return removed
 }
 
 func (conns *Connections) Broadcast(b []byte) []ConnErr {
 	return conns.broadcastFrom(nil, b)
 }
 
-func (conns *Connections) BroadcastFrom(from net.Conn, b []byte) []ConnErr {
+func (conns *Connections) BroadcastFrom(from Conn, b []byte) []ConnErr {
 	return conns.broadcastFrom(from, b)
 }
 
-func (conns *Connections) broadcastFrom(from net.Conn, b []byte) []ConnErr {
+func (conns *Connections) broadcastFrom(from Conn, b []byte) []ConnErr {
 	conns.mu.Lock()
 	defer conns.mu.Unlock()
 
@@ -64,13 +80,13 @@ func (conns *Connections) Count() int {
 	return len(conns.conns)
 }
 
-func (conns *Connections) HandleConnectionErr(c net.Conn, err error) (connectionOk bool) {
+func (conns *Connections) HandleConnectionErr(c Conn, err error) (connectionOk bool) {
 	if err == nil {
 		return true
 	}
 
 	if err == io.EOF {
-		conns.Remove(c)
+		conns.RemoveByID(c.ID())
 		return false
 	}
 
@@ -79,7 +95,7 @@ func (conns *Connections) HandleConnectionErr(c net.Conn, err error) (connection
 			return true
 		}
 
-		conns.Remove(c)
+		conns.RemoveByID(c.ID())
 		return false
 	}
 
@@ -87,6 +103,6 @@ func (conns *Connections) HandleConnectionErr(c net.Conn, err error) (connection
 }
 
 type ConnErr struct {
-	Conn net.Conn
-	Err error
+	Conn Conn
+	Err  error
 }

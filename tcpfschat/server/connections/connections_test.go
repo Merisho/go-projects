@@ -48,21 +48,21 @@ func TestConnectionsBroadcast(t *testing.T) {
 func TestConnectionsBroadcastFrom(t *testing.T) {
 	conns := &Connections{}
 
-	conn1 := test.NewTestConnection()
-	conn2 := test.NewTestConnection()
-	conn3 := test.NewTestConnection()
+	testConn1 := test.NewTestConnection()
+	testConn2 := test.NewTestConnection()
+	testConn3 := test.NewTestConnection()
 
-	conns.Add(conn1)
-	conns.Add(conn2)
-	conns.Add(conn3)
+	conn1, _ := conns.Add(testConn1)
+	conns.Add(testConn2)
+	conns.Add(testConn3)
 
 	msg := "test"
 	errs := conns.BroadcastFrom(conn1, []byte(msg))
 
 	assert.Empty(t, errs)
-	assert.Equal(t, "", conn1.FrontWrittenChunk())
-	assert.Equal(t, msg, conn2.FrontWrittenChunk())
-	assert.Equal(t, msg, conn3.FrontWrittenChunk())
+	assert.Equal(t, "", testConn1.FrontWrittenChunk())
+	assert.Equal(t, msg, testConn2.FrontWrittenChunk())
+	assert.Equal(t, msg, testConn3.FrontWrittenChunk())
 }
 
 func TestBroadcastErrors(t *testing.T) {
@@ -78,20 +78,9 @@ func TestBroadcastErrors(t *testing.T) {
 	assert.Equal(t, 2, len(connErrs))
 }
 
-func TestRemoveConnection(t *testing.T) {
-	conns := &Connections{}
-	conn := test.NewTestConnection()
-	conns.Add(conn)
-
-	conns.Remove(conn)
-
-	assert.Equal(t, 0, len(conns.conns))
-}
-
 func TestHandleConnectionClosing(t *testing.T) {
 	conns := &Connections{}
-	conn := test.NewTestConnection()
-	conns.Add(conn)
+	conn, _ := conns.Add(test.NewTestConnection())
 
 	connOk := conns.HandleConnectionErr(conn, io.EOF)
 
@@ -109,8 +98,7 @@ func TestHandleNilConnectionError(t *testing.T) {
 
 func TestHandleNonTemporaryError(t *testing.T) {
 	conns := &Connections{}
-	conn := test.NewTestConnection()
-	conns.Add(conn)
+	conn, _ := conns.Add(test.NewTestConnection())
 
 	connOk := conns.HandleConnectionErr(conn, TestErr{})
 
@@ -120,8 +108,7 @@ func TestHandleNonTemporaryError(t *testing.T) {
 
 func TestHandleTemporaryError(t *testing.T) {
 	conns := &Connections{}
-	conn := test.NewTestConnection()
-	conns.Add(conn)
+	conn, _ := conns.Add(test.NewTestConnection())
 
 	connOk := conns.HandleConnectionErr(conn, TestErr{Temp: true})
 
@@ -131,11 +118,34 @@ func TestHandleTemporaryError(t *testing.T) {
 
 func TestHandleTimeoutError(t *testing.T) {
 	conns := &Connections{}
-	conn := test.NewTestConnection()
-	conns.Add(conn)
+	conn, _ := conns.Add(test.NewTestConnection())
 
 	connOk := conns.HandleConnectionErr(conn, TestErr{Time: true})
 
 	assert.False(t, connOk)
 	assert.Equal(t, 0, conns.Count())
+}
+
+func TestGenerateUUIDOnConnectionAdd(t *testing.T) {
+	conns := &Connections{}
+	c := test.NewTestConnection()
+
+	conn, err := conns.Add(c)
+
+	assert.NoError(t, err)
+	assert.Len(t, conn.ID(), 16)
+}
+
+func TestRemoveByID(t *testing.T) {
+	conns := &Connections{}
+
+	conn, _ := conns.Add(test.NewTestConnection())
+
+	removed := conns.RemoveByID(conn.ID())
+	assert.Equal(t, conn, removed)
+	assert.Zero(t, conns.Count())
+
+	nonExistentID := []byte{1,2,3,4,5,6,7}
+	removed = conns.RemoveByID(nonExistentID)
+	assert.Nil(t, removed)
 }

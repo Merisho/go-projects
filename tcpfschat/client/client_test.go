@@ -10,7 +10,7 @@ import (
 
 func TestReceiveMessage(t *testing.T) {
     conn := test.NewTestConnection()
-    c := client.New(conn)
+    c := client.New(conn, nil)
 
     r := c.Receive()
     conn.ChunksToRead("Hello")
@@ -20,7 +20,7 @@ func TestReceiveMessage(t *testing.T) {
 
 func TestSkipNotReadyReceiver(t *testing.T) {
     conn := test.NewTestConnection()
-    c := client.New(conn)
+    c := client.New(conn, nil)
 
     _ = c.Receive()
     ready := c.Receive()
@@ -29,44 +29,15 @@ func TestSkipNotReadyReceiver(t *testing.T) {
     chanMessageEqual(t, ready, "Hello")
 }
 
-func TestRetryDeliveryToNotReadyReceiver(t *testing.T) {
-    conn := test.NewTestConnection()
-    c := client.New(conn)
-
-    notReady := c.Receive()
-    ready := c.Receive()
-    conn.ChunksToRead("Hello")
-
-    chanMessageEqual(t, ready, "Hello")
-    chanMessageEqual(t, notReady, "Hello")
-}
-
-func TestRemoveNotReadyReceiversAfterDeliveryRetryTimeout(t *testing.T) {
-    conn := test.NewTestConnection()
-    c := client.New(conn)
-
-    notReady := c.Receive()
-    conn.ChunksToRead("Hello")
-
-    time.Sleep(15 * time.Millisecond)
-
-    conn.ChunksToRead("Hello")
-
-    select {
-    case <- time.After(10 * time.Millisecond):
-    case _, ok := <- notReady:
-        assert.False(t, ok, "must NOT receive the 'Hello' message, but instead a channel closing signal")
-    }
-}
-
 func TestSendMessage(t *testing.T) {
     conn := test.NewTestConnection()
-    c := client.New(conn)
+    c := client.New(conn, nil)
 
     err := c.Send("Hello")
     assert.NoError(t, err)
 
-    assert.Equal(t, "Hello", conn.FrontWrittenChunk())
+    // Client appends 0 byte to the end of each message
+    assert.Equal(t, "Hello\x00", conn.FrontWrittenChunk())
 }
 
 func chanMessageEqual(t *testing.T, c chan string, expected string) {

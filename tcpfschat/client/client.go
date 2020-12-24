@@ -1,100 +1,27 @@
 package client
 
 import (
+	"bytes"
 	"io"
 	"log"
-	"time"
 )
 
-const (
-	sendMessageCmd commandType = iota
-	addReceiverCmd
-	removeReceiverCmd
-)
-
-func New(conn io.ReadWriteCloser) Client {
+func New(conn io.ReadWriteCloser, id []byte) Client {
 	c := Client{
 		conn: conn,
-		receiversCommands: make(chan command),
+		id: id,
+		receive: make(chan string),
 	}
 
-	c.commandHandlers = map[commandType]func(command){
-		sendMessageCmd: c.sendMessage,
-		addReceiverCmd: c.addReceiver,
-		removeReceiverCmd: c.removeReceiver,
-	}
-
-	<- c.handleReceiversCommands()
 	<- c.readMessages()
 
 	return c
 }
 
-type command struct {
-	cmdType commandType
-	payload interface{}
-}
-
-type commandType int
-
 type Client struct {
 	conn      io.ReadWriteCloser
-	receivers []chan string
-	receiversCommands chan command
-	commandHandlers map[commandType]func(command)
-}
-
-func (c *Client) handleReceiversCommands() chan struct{} {
-	ready := make(chan struct{})
-
-	go func() {
-		close(ready)
-		for cmd := range c.receiversCommands {
-			c.commandHandlers[cmd.cmdType](cmd)
-		}
-	}()
-
-	return ready
-}
-
-func (c *Client) removeReceiver(cmd command) {
-	r := cmd.payload.(chan string)
-	var i int
-	for i = range c.receivers {
-		if c.receivers[i] == r {
-			break
-		}
-	}
-	close(r)
-	c.receivers = append(c.receivers[:i], c.receivers[i + 1:]...)
-}
-
-func (c *Client) addReceiver(cmd command) {
-	r := cmd.payload.(chan string)
-	c.receivers = append(c.receivers, r)
-	r <- "ok"
-}
-
-func (c *Client) sendMessage(cmd command) {
-	rawMsg := cmd.payload.([]byte)
-	msg := string(rawMsg)
-	for _, r := range c.receivers {
-		select {
-		case r <- msg:
-		default:
-			c.retryMsg(msg, r)
-		}
-	}
-}
-
-func (c *Client) retryMsg(msg string, r chan string) {
-	go func() {
-		select {
-		case r <- msg:
-		case <- time.After(10 * time.Millisecond):
-			c.receiversCommands <- command{removeReceiverCmd, r}
-		}
-	}()
+	id        []byte
+	receive   chan string
 }
 
 func (c *Client) readMessages() chan struct{} {
@@ -103,14 +30,24 @@ func (c *Client) readMessages() chan struct{} {
 	go func() {
 		close(ready)
 		for {
-			b := make([]byte, 8192)
+			b := make([]byte, 1024 * 1024)
 			n, err := c.conn.Read(b)
 			if err != nil {
+				if err == io.EOF {
+					close(c.receive)
+					return
+				}
+
 				log.Println(err)
 				continue
 			}
 
-			c.receiversCommands <- command{sendMessageCmd, b[:n]}
+			msgs := bytes.Split(b[:n], []byte{0})
+			for _, msg := range msgs {
+				if len(msg) > 0 {
+					c.receive <- string(msg)
+				}
+			}
 		}
 	}()
 
@@ -118,13 +55,14 @@ func (c *Client) readMessages() chan struct{} {
 }
 
 func (c *Client) Receive() chan string {
-	r := make(chan string)
-	c.receiversCommands <- command{addReceiverCmd, r}
-	<-r
-	return r
+	return c.receive
 }
 
 func (c *Client) Send(msg string) error {
-	_, err := c.conn.Write([]byte(msg))
+	_, err := c.conn.Write(append([]byte(msg), 0))
 	return err
+}
+
+func (c *Client) ID() []byte {
+	return c.id
 }

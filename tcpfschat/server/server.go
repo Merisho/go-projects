@@ -2,6 +2,7 @@ package server
 
 import (
     "github.com/merisho/tcp-fs-chat/server/connections"
+    "github.com/pkg/errors"
     "log"
     "net"
 )
@@ -43,23 +44,37 @@ func (s *Server) start() *Server {
 }
 
 func (s *Server) handleConnection(c net.Conn) {
-    s.conns.Add(c)
+    conn, err := s.conns.Add(c)
+    if err != nil {
+        log.Println(errors.Wrap(err, "could not add connection"))
+        err = c.Close()
+        if err != nil {
+            log.Println(errors.Wrap(err, "could not close connection"))
+        }
+
+        return
+    }
 
     go func() {
-        defer c.Close()
+        _, err := conn.Write(conn.ID())
+        if !s.conns.HandleConnectionErr(conn, err) {
+            return
+        }
+
+        defer conn.Close()
         b := make([]byte, 1024 * 1024)
         for {
-            n, err := c.Read(b)
-            if !s.conns.HandleConnectionErr(c, err) {
+            n, err := conn.Read(b)
+            if !s.conns.HandleConnectionErr(conn, err) {
                 return
             }
 
-            s.broadcast(c, b[:n])
+            s.broadcast(conn, b[:n])
         }
     }()
 }
 
-func (s *Server) broadcast(c net.Conn, msg []byte) {
+func (s *Server) broadcast(c connections.Conn, msg []byte) {
     errs := s.conns.BroadcastFrom(c, msg)
     if len(errs) != 0 {
         for _, e := range errs {
@@ -70,4 +85,13 @@ func (s *Server) broadcast(c net.Conn, msg []byte) {
 
 func (s *Server) ConnectionCount() int {
     return s.conns.Count()
+}
+
+func (s *Server) Disconnect(clientID []byte) error {
+    conn := s.conns.RemoveByID(clientID)
+    if conn == nil {
+        return nil
+    }
+
+    return conn.Close()
 }
