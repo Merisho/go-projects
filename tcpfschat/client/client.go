@@ -2,8 +2,8 @@ package client
 
 import (
 	"bytes"
+	"github.com/merisho/tcp-fs-chat/internal/chaterrors"
 	"io"
-	"log"
 )
 
 func New(conn io.ReadWriteCloser, id []byte) Client {
@@ -32,14 +32,9 @@ func (c *Client) readMessages() chan struct{} {
 		for {
 			b := make([]byte, 1024 * 1024)
 			n, err := c.conn.Read(b)
-			if err != nil {
-				if err == io.EOF {
-					close(c.receive)
-					return
-				}
-
-				log.Println(err)
-				continue
+			if !chaterrors.IsTemporary(err) {
+				close(c.receive)
+				return
 			}
 
 			msgs := bytes.Split(b[:n], []byte{0})

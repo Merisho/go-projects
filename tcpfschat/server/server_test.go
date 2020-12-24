@@ -41,6 +41,7 @@ func TestAcceptClient(t *testing.T) {
 	ln.connectionsToAccept(test.NewTestConnection())
 
 	s := NewServer(ln)
+	time.Sleep(50 * time.Millisecond)
 
 	assert.Equal(t, 1, s.ConnectionCount())
 }
@@ -51,7 +52,7 @@ func TestHandleConnectionClosing(t *testing.T) {
 	ln.connectionsToAccept(conn)
 
 	s := NewServer(ln)
-	time.Sleep(1 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond)
 
 	assert.Equal(t, 0, s.ConnectionCount())
 	assert.True(t, conn.Closed())

@@ -2,10 +2,10 @@ package connections
 
 import (
 	"bytes"
-	"io"
+	"github.com/google/uuid"
+	"github.com/merisho/tcp-fs-chat/internal/chaterrors"
 	"net"
 	"sync"
-	"github.com/google/uuid"
 )
 
 type Connections struct {
@@ -81,25 +81,12 @@ func (conns *Connections) Count() int {
 }
 
 func (conns *Connections) HandleConnectionErr(c Conn, err error) (connectionOk bool) {
-	if err == nil {
+	if chaterrors.IsTemporary(err) {
 		return true
 	}
 
-	if err == io.EOF {
-		conns.RemoveByID(c.ID())
-		return false
-	}
-
-	if e, ok := err.(net.Error); ok {
-		if e.Temporary() {
-			return true
-		}
-
-		conns.RemoveByID(c.ID())
-		return false
-	}
-
-	return true
+	conns.RemoveByID(c.ID())
+	return false
 }
 
 type ConnErr struct {

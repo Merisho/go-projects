@@ -32,7 +32,7 @@ func (e2e *E2ETestSuite) SetupSuite() {
 }
 
 func (e2e *E2ETestSuite) TestE2E() {
-    testMessages := []string{ "1", "2", "3", "4", "5" }
+    testMessages := []string{ "Message 1", "Message 2", "Message 3", "Message 4", "Message 5" }
 
     wg := sync.WaitGroup{}
 
