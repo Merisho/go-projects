@@ -4,6 +4,7 @@ import (
 	"github.com/merisho/tcp-fs-chat/test"
 	"github.com/stretchr/testify/assert"
 	"io"
+	"net"
 	"testing"
 )
 
@@ -23,59 +24,6 @@ func (e TestErr) Error() string {
 
 func (e TestErr) Timeout() bool {
 	return e.Time
-}
-
-func TestConnectionsBroadcast(t *testing.T) {
-	conns := &Connections{}
-
-	conn1 := test.NewTestConnection()
-	conn2 := test.NewTestConnection()
-	conn3 := test.NewTestConnection()
-
-	conns.Add(conn1)
-	conns.Add(conn2)
-	conns.Add(conn3)
-
-	msg := "test"
-	errs := conns.Broadcast([]byte(msg))
-
-	assert.Empty(t, errs)
-	assert.Equal(t, msg, conn1.FrontWrittenChunk())
-	assert.Equal(t, msg, conn2.FrontWrittenChunk())
-	assert.Equal(t, msg, conn3.FrontWrittenChunk())
-}
-
-func TestConnectionsBroadcastFrom(t *testing.T) {
-	conns := &Connections{}
-
-	testConn1 := test.NewTestConnection()
-	testConn2 := test.NewTestConnection()
-	testConn3 := test.NewTestConnection()
-
-	conn1, _ := conns.Add(testConn1)
-	conns.Add(testConn2)
-	conns.Add(testConn3)
-
-	msg := "test"
-	errs := conns.BroadcastFrom(conn1, []byte(msg))
-
-	assert.Empty(t, errs)
-	assert.Equal(t, "", testConn1.FrontWrittenChunk())
-	assert.Equal(t, msg, testConn2.FrontWrittenChunk())
-	assert.Equal(t, msg, testConn3.FrontWrittenChunk())
-}
-
-func TestBroadcastErrors(t *testing.T) {
-	conns := &Connections{}
-
-	conn1 := test.NewTestConnection().ErrorOnWrite()
-	conn2 := test.NewTestConnection().ErrorOnWrite()
-	conns.Add(conn1)
-	conns.Add(conn2)
-
-	connErrs := conns.Broadcast([]byte("Hello"))
-
-	assert.Equal(t, 2, len(connErrs))
 }
 
 func TestHandleConnectionClosing(t *testing.T) {
@@ -148,4 +96,23 @@ func TestRemoveByID(t *testing.T) {
 	nonExistentID := []byte{1,2,3,4,5,6,7}
 	removed = conns.RemoveByID(nonExistentID)
 	assert.Nil(t, removed)
+}
+
+func TestForEach(t *testing.T) {
+	conns := &Connections{}
+
+	conn1, conn2 := net.Pipe()
+	conn3, conn4 := net.Pipe()
+
+	conns.Add(conn1)
+	conns.Add(conn2)
+	conns.Add(conn3)
+	conns.Add(conn4)
+
+	count := make(chan struct{}, 4)
+	conns.ForEach(func(c Conn) {
+		count <- struct{}{}
+	})
+
+	assert.Len(t, count, 4)
 }

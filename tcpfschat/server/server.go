@@ -74,12 +74,21 @@ func (s *Server) handleConnection(c net.Conn) {
     }()
 }
 
-func (s *Server) broadcast(c connections.Conn, msg []byte) {
-    errs := s.conns.BroadcastFrom(c, msg)
-    if len(errs) != 0 {
-        for _, e := range errs {
-            log.Println(e.Err.Error())
+func (s *Server) broadcast(conn connections.Conn, msg []byte) {
+    errChan := make(chan error, s.conns.Count())
+    s.conns.ForEach(func(c connections.Conn) {
+        if c == conn {
+            return
         }
+
+        _, err := c.Write(msg)
+        if err != nil {
+            errChan <- err
+        }
+    })
+
+    for len(errChan) > 0 {
+        log.Println(<-errChan)
     }
 }
 

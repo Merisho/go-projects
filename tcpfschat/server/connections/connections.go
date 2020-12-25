@@ -44,34 +44,23 @@ func (conns *Connections) RemoveByID(id []byte) Conn {
 	return removed
 }
 
-func (conns *Connections) Broadcast(b []byte) []ConnErr {
-	return conns.broadcastFrom(nil, b)
-}
-
-func (conns *Connections) BroadcastFrom(from Conn, b []byte) []ConnErr {
-	return conns.broadcastFrom(from, b)
-}
-
-func (conns *Connections) broadcastFrom(from Conn, b []byte) []ConnErr {
+func (conns *Connections) ForEach(f func(c Conn)) {
 	conns.mu.Lock()
 	defer conns.mu.Unlock()
 
-	var errs []ConnErr
+	var wg sync.WaitGroup
+	wg.Add(len(conns.conns))
 	for _, c := range conns.conns {
-		if c == from {
-			continue
-		}
+		go func(c Conn) {
+			defer func() {
+				wg.Done()
+			}()
 
-		_, err := c.Write(b)
-		if err != nil {
-			errs = append(errs, ConnErr{
-				Conn: c,
-				Err: err,
-			})
-		}
+			f(c)
+		}(c)
 	}
 
-	return errs
+	wg.Wait()
 }
 
 func (conns *Connections) Count() int {
