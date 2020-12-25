@@ -3,10 +3,11 @@ package client
 import (
 	"bytes"
 	"github.com/merisho/tcp-fs-chat/internal/chaterrors"
-	"io"
+	"net"
+	"time"
 )
 
-func New(conn io.ReadWriteCloser, id []byte) Client {
+func New(conn net.Conn, id []byte) Client {
 	c := Client{
 		conn: conn,
 		id: id,
@@ -19,7 +20,7 @@ func New(conn io.ReadWriteCloser, id []byte) Client {
 }
 
 type Client struct {
-	conn      io.ReadWriteCloser
+	conn      net.Conn
 	id        []byte
 	receive   chan string
 }
@@ -54,6 +55,8 @@ func (c *Client) Receive() chan string {
 }
 
 func (c *Client) Send(msg string) error {
+	_ = c.conn.SetWriteDeadline(time.Now().Add(1 * time.Second))
+
 	_, err := c.conn.Write(append([]byte(msg), 0))
 	return err
 }

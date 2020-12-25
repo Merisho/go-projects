@@ -5,6 +5,7 @@ import (
     "github.com/pkg/errors"
     "log"
     "net"
+    "time"
 )
 
 func NewServer(ln net.Listener) *Server {
@@ -80,6 +81,8 @@ func (s *Server) broadcast(conn connections.Conn, msg []byte) {
         if c == conn {
             return
         }
+
+        _ = c.SetWriteDeadline(time.Now().Add(1 * time.Second))
 
         _, err := c.Write(msg)
         if err != nil {
