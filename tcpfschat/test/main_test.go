@@ -44,7 +44,13 @@ func (e2e *E2ETestSuite) TestE2E() {
     e2e.NoError(err)
     e2e.NotEmpty(c2.ID())
 
-    clients := []client.Client{c1, c2}
+    c3, err := client.ConnectTCP("localhost", port)
+    e2e.NoError(err)
+    e2e.NotEmpty(c2.ID())
+
+    clients := []client.Client{c1, c2, c3}
+    numberOfOtherParticipants := len(clients) - 1
+    expectedNumberOfMessagesForEachClient := (len(clients) - 1) * len(testMessages)
 
     wg.Add(len(clients))
 
@@ -55,13 +61,13 @@ func (e2e *E2ETestSuite) TestE2E() {
                 e2e.NoError(err)
             }
 
-            var msgs []string
-            for range testMessages {
-                msgs = append(msgs, <- c.Receive())
+            msgs := make(map[string]int)
+            for i := 0; i < expectedNumberOfMessagesForEachClient; i++ {
+                msgs[<- c.Receive()]++
             }
 
             for _, msg := range testMessages {
-                e2e.Contains(msgs, msg)
+                e2e.Equal(numberOfOtherParticipants, msgs[msg])
             }
 
             wg.Done()
@@ -69,17 +75,4 @@ func (e2e *E2ETestSuite) TestE2E() {
     }
 
     wg.Wait()
-}
-
-func (e2e *E2ETestSuite) TestDisconnectClient() {
-   c, err := client.ConnectTCP("localhost", port)
-   e2e.NoError(err)
-
-   err = e2e.server.Disconnect(c.ID())
-   e2e.NoError(err)
-
-   e2e.Equal(0, e2e.server.ConnectionCount())
-
-   _, ok := <- c.Receive()
-   e2e.False(ok)
 }
