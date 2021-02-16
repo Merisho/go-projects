@@ -42,19 +42,24 @@ func TestSendMessage(t *testing.T) {
 }
 
 func TestDisconnectFromServer(t *testing.T) {
-    conn := test.NewTestConnection().EOFOnRead()
+    testServerConn, conn := net.Pipe()
     c := client.New(conn, nil)
+
+    err := testServerConn.Close()
+    if err != nil {
+        panic(err)
+    }
 
     _, ok := <-c.Receive()
     assert.False(t, ok)
 }
 
 func TestSplitTCPDataChunkIntoMessages(t *testing.T) {
-    testConn, conn := net.Pipe()
+    testServerConn, conn := net.Pipe()
     c := client.New(conn, nil)
 
     msg := []byte("Hello\x00World\x00")
-    _, _ = testConn.Write(msg)
+    _, _ = testServerConn.Write(msg)
 
     r := c.Receive()
     assert.Equal(t, "Hello", <-r)

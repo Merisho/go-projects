@@ -7,9 +7,11 @@ import (
     "log"
     "sync"
     "testing"
+    "time"
 )
 
 const (
+    host = "localhost"
     port = 1337
 )
 
@@ -36,15 +38,15 @@ func (e2e *E2ETestSuite) TestE2E() {
 
     wg := sync.WaitGroup{}
 
-    c1, err := client.ConnectTCP("localhost", port)
+    c1, err := client.ConnectTCP(host, port)
     e2e.NoError(err)
     e2e.NotEmpty(c1.ID())
 
-    c2, err := client.ConnectTCP("localhost", port)
+    c2, err := client.ConnectTCP(host, port)
     e2e.NoError(err)
     e2e.NotEmpty(c2.ID())
 
-    c3, err := client.ConnectTCP("localhost", port)
+    c3, err := client.ConnectTCP(host, port)
     e2e.NoError(err)
     e2e.NotEmpty(c2.ID())
 
@@ -75,4 +77,34 @@ func (e2e *E2ETestSuite) TestE2E() {
     }
 
     wg.Wait()
+}
+
+func (e2e *E2ETestSuite) TestVeryLongMessageSplitIntoMultipleMessages() {
+    testMessage := make([]byte, 2 * 8)
+    for i := range testMessage {
+        testMessage[i] = 'a' + byte(i % 27)
+    }
+
+    c1, err := client.ConnectTCP(host, port)
+    e2e.NoError(err)
+
+    c2, err := client.ConnectTCP(host, port)
+    e2e.NoError(err)
+
+    err = c1.Send(string(testMessage))
+    e2e.NoError(err)
+
+    r := c2.Receive()
+
+    var actualMessages []byte
+    for i := 1; i <= 2; i++ {
+        select {
+        case msg := <- r:
+            actualMessages = append(actualMessages, msg...)
+        case <- time.After(100 * time.Millisecond):
+            e2e.FailNowf("message has not been received", "message %d", i)
+        }
+    }
+
+    e2e.Equal(testMessage, actualMessages)
 }
