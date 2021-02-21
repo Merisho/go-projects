@@ -60,18 +60,7 @@ func (c *Client) Receive() chan string {
 }
 
 func (c *Client) Send(msg string) error {
-	if len(msg) < maxMessageSize {
-		return c.send([]byte(msg))
-	}
-
-	for start := 0; start < len(msg); start += maxMessageSize {
-		err := c.send([]byte(msg[start:start + maxMessageSize]))
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return c.send([]byte(msg))
 }
 
 func (c *Client) send(msg []byte) error {

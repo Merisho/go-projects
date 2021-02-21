@@ -7,7 +7,6 @@ import (
     "log"
     "sync"
     "testing"
-    "time"
 )
 
 const (
@@ -80,7 +79,7 @@ func (e2e *E2ETestSuite) TestE2E() {
 }
 
 func (e2e *E2ETestSuite) TestVeryLongMessageSplitIntoMultipleMessages() {
-    testMessage := make([]byte, 2 * 8)
+    testMessage := make([]byte, 100 * 1024 * 1024)
     for i := range testMessage {
         testMessage[i] = 'a' + byte(i % 27)
     }
@@ -96,15 +95,5 @@ func (e2e *E2ETestSuite) TestVeryLongMessageSplitIntoMultipleMessages() {
 
     r := c2.Receive()
 
-    var actualMessages []byte
-    for i := 1; i <= 2; i++ {
-        select {
-        case msg := <- r:
-            actualMessages = append(actualMessages, msg...)
-        case <- time.After(100 * time.Millisecond):
-            e2e.FailNowf("message has not been received", "message %d", i)
-        }
-    }
-
-    e2e.Equal(testMessage, actualMessages)
+    e2e.Equal(string(testMessage), <-r)
 }
