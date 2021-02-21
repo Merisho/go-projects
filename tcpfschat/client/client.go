@@ -1,21 +1,21 @@
 package client
 
 import (
-	"bytes"
+	"github.com/merisho/tcp-fs-chat/client/messagebuffer"
 	"github.com/merisho/tcp-fs-chat/internal/chaterrors"
 	"net"
 	"time"
 )
 
 const (
-	maxMessageSize = 8
+	maxMessageSize = 16 * 1024
 )
 
 func New(conn net.Conn, id []byte) Client {
 	c := Client{
 		conn: conn,
 		id: id,
-		receive: make(chan string),
+		receive: make(chan string, 1024),
 	}
 
 	<- c.readMessages()
@@ -32,6 +32,7 @@ type Client struct {
 func (c *Client) readMessages() chan struct{} {
 	ready := make(chan struct{})
 
+	msgBuffer := messagebuffer.MessageBuffer{}
 	go func() {
 		close(ready)
 		for {
@@ -42,7 +43,7 @@ func (c *Client) readMessages() chan struct{} {
 				return
 			}
 
-			msgs := bytes.Split(b[:n], []byte{0})
+			msgs := msgBuffer.Messages(b[:n])
 			for _, msg := range msgs {
 				if len(msg) > 0 {
 					c.receive <- string(msg)
@@ -59,6 +60,10 @@ func (c *Client) Receive() chan string {
 }
 
 func (c *Client) Send(msg string) error {
+	if len(msg) < maxMessageSize {
+		return c.send([]byte(msg))
+	}
+
 	for start := 0; start < len(msg); start += maxMessageSize {
 		err := c.send([]byte(msg[start:start + maxMessageSize]))
 		if err != nil {

@@ -14,7 +14,7 @@ func TestReceiveMessage(t *testing.T) {
     c := client.New(conn, nil)
 
     r := c.Receive()
-    conn.ChunksToRead("Hello")
+    conn.ChunksToRead("Hello\x00")
 
     chanMessageEqual(t, r, "Hello")
 }
@@ -25,7 +25,7 @@ func TestSkipNotReadyReceiver(t *testing.T) {
 
     _ = c.Receive()
     ready := c.Receive()
-    conn.ChunksToRead("Hello")
+    conn.ChunksToRead("Hello\x00")
 
     chanMessageEqual(t, ready, "Hello")
 }
@@ -63,6 +63,19 @@ func TestSplitTCPDataChunkIntoMessages(t *testing.T) {
 
     r := c.Receive()
     assert.Equal(t, "Hello", <-r)
+    assert.Equal(t, "World", <-r)
+}
+
+func TestHandleCorrectlyMessageLeftover(t *testing.T) {
+    testServerConn, conn := net.Pipe()
+    c := client.New(conn, nil)
+
+    r := c.Receive()
+
+    testServerConn.Write([]byte("Hello\x00Wo"))
+    assert.Equal(t, "Hello", <-r)
+
+    testServerConn.Write([]byte("rld\x00"))
     assert.Equal(t, "World", <-r)
 }
 
