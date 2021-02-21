@@ -17,7 +17,7 @@ func main() {
 	host := os.Args[1]
 
 	port := uint16(1337)
-	if len(os.Args) == 3 {
+	if len(os.Args) >= 3 {
 		p, err := strconv.ParseUint(os.Args[2], 10, 16)
 		if err != nil {
 			log.Fatal("port is not a number")
@@ -29,6 +29,10 @@ func main() {
 	c, err := client.ConnectTCP(host, port)
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	if len(os.Args) >= 4 {
+		c.SetName(os.Args[3])
 	}
 
 	go func() {

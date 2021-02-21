@@ -1,8 +1,10 @@
 package client
 
 import (
+	"fmt"
 	"github.com/merisho/tcp-fs-chat/client/messagebuffer"
 	"github.com/merisho/tcp-fs-chat/internal/chaterrors"
+	"math/rand"
 	"net"
 	"time"
 )
@@ -12,10 +14,13 @@ const (
 )
 
 func New(conn net.Conn, id []byte) Client {
+	rand.Seed(time.Now().Unix())
+
 	c := Client{
 		conn: conn,
 		id: id,
 		receive: make(chan string, 1024),
+		name: fmt.Sprintf("Anonymous%d", rand.Int()),
 	}
 
 	<- c.readMessages()
@@ -27,6 +32,7 @@ type Client struct {
 	conn      net.Conn
 	id        []byte
 	receive   chan string
+	name      string
 }
 
 func (c *Client) readMessages() chan struct{} {
@@ -59,7 +65,9 @@ func (c *Client) Receive() chan string {
 	return c.receive
 }
 
-func (c *Client) Send(msg string) error {
+func (c *Client) Send(message string) error {
+	ts := time.Now().Format("2021-21-02 15:04:00")
+	msg := fmt.Sprintf("%s\n==========\n%s: %s\n", ts, c.name, message)
 	return c.send([]byte(msg))
 }
 
@@ -76,4 +84,8 @@ func (c *Client) send(msg []byte) error {
 
 func (c *Client) ID() []byte {
 	return c.id
+}
+
+func (c *Client) SetName(name string) {
+	c.name = name
 }
