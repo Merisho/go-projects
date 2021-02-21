@@ -1,6 +1,6 @@
 module github.com/merisho/tcp-fs-chat
 
-go 1.14
+go 1.16
 
 require (
 	github.com/google/uuid v1.1.2
