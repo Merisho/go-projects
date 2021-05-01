@@ -5,6 +5,9 @@ type MessageType byte
 const (
     TextType = iota
     FileType
+    MsgEndType
+    ErrorType
+    TimeoutType
 )
 
 func Int64ToBytes(n int64) [8]byte {

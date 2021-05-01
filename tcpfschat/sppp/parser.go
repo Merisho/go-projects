@@ -10,6 +10,15 @@ const (
     headerSize = 17
 )
 
+func NewMessage(id int64, t MessageType, content []byte) Message {
+    return Message{
+        Type:    t,
+        Size:    int64(len(content)),
+        ID:      id,
+        Content: content,
+    }
+}
+
 type Message struct {
     Type MessageType
     Size int64
@@ -19,25 +28,24 @@ type Message struct {
 
 func UnmarshalMessage(msg [1024]byte) (Message, error) {
     header := msg[:headerSize]
-    msgType := header[0]
-    rawSize := header[1:9]
-    rawMsgID := header[9:headerSize]
 
-    var sz [8]byte
-    copy(sz[:], rawSize)
+    var rawSize [8]byte
+    copy(rawSize[:], header[1:9])
 
-    var msgID [8]byte
-    copy(msgID[:], rawMsgID)
+    var rawMsgID [8]byte
+    copy(rawMsgID[:], header[9:headerSize])
+
+    size := BytesToInt64(rawSize)
 
     return Message{
-        Type:    MessageType(msgType),
-        Size:    BytesToInt64(sz),
-        ID:      BytesToInt64(msgID),
-        Content: msg[headerSize:],
+        Type:    MessageType(header[0]),
+        Size:    size,
+        ID:      BytesToInt64(rawMsgID),
+        Content: msg[headerSize:headerSize + size],
     }, nil
 }
 
-func (m Message) Marshal() ([1024]byte, error) {
+func (m Message) Marshal() [1024]byte {
     var b [1024]byte
     b[0] = byte(m.Type)
 
@@ -48,5 +56,5 @@ func (m Message) Marshal() ([1024]byte, error) {
     copy(b[9:], id[:])
     copy(b[headerSize:], m.Content)
 
-    return b, nil
+    return b
 }

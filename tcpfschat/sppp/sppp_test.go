@@ -57,23 +57,24 @@ func (s *SPPPTestSuite) TestInt64ToBytes() {
 func (s *SPPPTestSuite) TestUnmarshal() {
    headerSize := 17
    var rawMsg [1024]byte
-   actualMsg := strings.Repeat("a", len(rawMsg) - headerSize)
+   size := int64(100)
+   expectedMsg := strings.Repeat("a", int(size))
 
    rawMsg[0] = 0
 
-   size := Int64ToBytes(1000)
-   copy(rawMsg[1:], size[:])
+   rawSize := Int64ToBytes(size)
+   copy(rawMsg[1:], rawSize[:])
 
    msgID := Int64ToBytes(1)
    copy(rawMsg[9:], msgID[:])
-   copy(rawMsg[headerSize:], actualMsg)
+   copy(rawMsg[headerSize:], expectedMsg)
 
     msg, err := UnmarshalMessage(rawMsg)
     s.NoError(err)
     s.EqualValues(TextType, msg.Type)
-    s.EqualValues(1000, msg.Size)
+    s.EqualValues(size, msg.Size)
     s.EqualValues(1, msg.ID)
-    s.EqualValues(actualMsg, string(msg.Content))
+    s.EqualValues(expectedMsg, string(msg.Content))
 }
 
 func (s *SPPPTestSuite) TestMarshal() {
