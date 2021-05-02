@@ -1,4 +1,4 @@
-package server
+package conn
 
 import (
     "github.com/merisho/tcp-fs-chat/sppp"

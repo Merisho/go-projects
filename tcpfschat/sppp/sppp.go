@@ -8,6 +8,7 @@ const (
     EndType
     ErrorType
     TimeoutType
+    maxMessageTypeIota
 )
 
 func Int64ToBytes(n int64) [8]byte {

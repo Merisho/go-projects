@@ -1,6 +1,7 @@
 package server
 
 import (
+    "github.com/merisho/tcp-fs-chat/sppp/conn"
     "net"
     "strconv"
 )
@@ -26,12 +27,12 @@ type Listener struct {
 }
 
 func (l *Listener) Accept() (net.Conn, error) {
-    conn, err := l.listener.Accept()
+    c, err := l.listener.Accept()
     if err != nil {
         return nil, err
     }
 
-    return NewConn(conn), nil
+    return conn.NewConn(c), nil
 }
 
 func (l *Listener) Close() error {

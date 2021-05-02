@@ -1,5 +1,7 @@
 package sppp
 
+import "errors"
+
 // The message is 1024 bytes
 // 1 byte - type
 // 8 bytes - size
@@ -8,6 +10,11 @@ package sppp
 
 const (
     headerSize = 17
+    totalMsgSize = 1024
+)
+
+var (
+    badMsgError = errors.New("bad message")
 )
 
 func NewMessage(id int64, t MessageType, content []byte) Message {
@@ -26,8 +33,9 @@ type Message struct {
     Content []byte
 }
 
-func UnmarshalMessage(msg [1024]byte) (Message, error) {
+func UnmarshalMessage(msg [1024]byte) (m Message, err error) {
     header := msg[:headerSize]
+    msgType := header[0]
 
     var rawSize [8]byte
     copy(rawSize[:], header[1:9])
@@ -37,12 +45,22 @@ func UnmarshalMessage(msg [1024]byte) (Message, error) {
 
     size := BytesToInt64(rawSize)
 
-    return Message{
+    if invalidMessage(msgType, size) {
+        return Message{}, badMsgError
+    }
+
+    m = Message{
         Type:    MessageType(header[0]),
         Size:    size,
         ID:      BytesToInt64(rawMsgID),
         Content: msg[headerSize:headerSize + size],
-    }, nil
+    }
+
+    return m, err
+}
+
+func invalidMessage(msgType byte, size int64) bool {
+    return size > totalMsgSize - headerSize || msgType >= maxMessageTypeIota
 }
 
 func (m Message) Marshal() [1024]byte {

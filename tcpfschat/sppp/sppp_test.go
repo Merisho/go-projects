@@ -77,6 +77,16 @@ func (s *SPPPTestSuite) TestUnmarshal() {
     s.EqualValues(expectedMsg, string(msg.Content))
 }
 
+func (s *SPPPTestSuite) TestUnmarshalBadMessage() {
+    var badMsg [1024]byte
+    copy(badMsg[:], "a garbage message")
+
+    msg, err := UnmarshalMessage(badMsg)
+
+    s.Require().EqualError(err, "bad message")
+    s.Require().True(msg.Empty())
+}
+
 func (s *SPPPTestSuite) TestMarshal() {
     headerSize := 17
     var rawMsg [1024]byte

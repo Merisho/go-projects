@@ -1,4 +1,4 @@
-package server
+package conn
 
 import (
     "errors"
@@ -96,7 +96,9 @@ func (c *Conn) startReading() {
 
             msg, err := sppp.UnmarshalMessage(b)
             if err != nil {
-                panic(err)
+                badMsg := sppp.NewMessage(0, sppp.ErrorType, nil).Marshal()
+                _, _ = c.Conn.Write(badMsg[:])
+                continue
             }
 
             switch msg.Type {

@@ -1,4 +1,4 @@
-package server
+package conn
 
 import (
     "github.com/merisho/tcp-fs-chat/sppp"
@@ -138,4 +138,32 @@ func (s *ConnTestSuite) TestReadStreamTimeout() {
 
     test()
     test()
+}
+
+func (s *ConnTestSuite) TestHandleInvalidMessage() {
+    c1, c2 := net.Pipe()
+    reader := NewConn(c2)
+    reader.SetStreamReadTimeout(50 * time.Millisecond)
+
+    rawMsg := []byte("a garbage message")
+    _, _ = c1.Write(rawMsg[:])
+
+    msgChan := make(chan sppp.Message)
+    go func() {
+        m, _ := reader.ReadMsg()
+        msgChan <- m
+    }()
+
+    select {
+    case <- msgChan:
+        s.Fail("Must not receive a garbage message")
+    case <- time.After(60 * time.Millisecond):
+    }
+
+    var rawInvalidMsgResponse [1024]byte
+    _, _ = c1.Read(rawInvalidMsgResponse[:])
+
+    timeoutRes, err := sppp.UnmarshalMessage(rawInvalidMsgResponse)
+    s.Require().NoError(err)
+    s.Require().EqualValues(sppp.ErrorType, timeoutRes.Type)
 }
