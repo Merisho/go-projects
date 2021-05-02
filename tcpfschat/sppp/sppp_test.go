@@ -60,7 +60,7 @@ func (s *SPPPTestSuite) TestUnmarshal() {
    size := int64(100)
    expectedMsg := strings.Repeat("a", int(size))
 
-   rawMsg[0] = 0
+   rawMsg[0] = TextType
 
    rawSize := Int64ToBytes(size)
    copy(rawMsg[1:], rawSize[:])
@@ -99,7 +99,6 @@ func (s *SPPPTestSuite) TestMarshal() {
         Content: []byte(actualMsg),
     }
 
-    b, err := msg.Marshal()
-    s.NoError(err)
+    b := msg.Marshal()
     s.EqualValues(rawMsg, b)
 }

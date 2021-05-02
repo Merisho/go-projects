@@ -3,9 +3,9 @@ package sppp
 type MessageType byte
 
 const (
-    TextType = iota
-    FileType
-    MsgEndType
+    TextType = iota + 1
+    StreamType
+    EndType
     ErrorType
     TimeoutType
 )

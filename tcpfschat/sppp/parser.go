@@ -58,3 +58,7 @@ func (m Message) Marshal() [1024]byte {
 
     return b
 }
+
+func (m Message) Empty() bool {
+    return m.Type == 0 && m.Size == 0 && m.ID == 0
+}

@@ -29,7 +29,7 @@ func (s *ConnTestSuite) TestMsgRead() {
     rawMsg = sppp.NewMessage(id, sppp.TextType, []byte(" message")).Marshal()
     _, _ = c1.Write(rawMsg[:])
 
-    rawMsg = sppp.NewMessage(id, sppp.MsgEndType, nil).Marshal()
+    rawMsg = sppp.NewMessage(id, sppp.EndType, nil).Marshal()
     _, _ = c1.Write(rawMsg[:])
 
     msg, err := reader.ReadMsg()
@@ -66,3 +66,60 @@ func (s *ConnTestSuite) TestMsgReadTimeout() {
    s.Require().EqualValues(sppp.TimeoutType, timeoutRes.Type)
    s.Require().Equal(id, timeoutRes.ID)
 }
+
+func (s *ConnTestSuite) TestReadStream() {
+    c1, c2 := net.Pipe()
+    reader := NewConn(c2)
+
+    id := rand.Int63()
+    streamMeta := []byte("stream meta info")
+    rawMsg := sppp.NewMessage(id, sppp.StreamType, streamMeta).Marshal()
+    _, _  = c1.Write(rawMsg[:])
+
+    streamData := []byte("chunk 1")
+    rawMsg = sppp.NewMessage(id, sppp.StreamType, streamData).Marshal()
+    _, _  = c1.Write(rawMsg[:])
+
+    streamData = []byte("chunk 2")
+    rawMsg = sppp.NewMessage(id, sppp.StreamType, streamData).Marshal()
+    _, _  = c1.Write(rawMsg[:])
+
+    stream, _ := reader.ReadStream()
+
+    meta := <- stream
+    s.Require().Equal("stream meta info", string(meta))
+
+    chunk := <- stream
+    s.Require().Equal("chunk 1", string(chunk))
+
+    chunk = <- stream
+    s.Require().Equal("chunk 2", string(chunk))
+
+    rawMsg = sppp.NewMessage(id, sppp.EndType, nil).Marshal()
+    _, _  = c1.Write(rawMsg[:])
+
+    chunk, ok := <- stream
+    s.Require().False(ok)
+    s.Require().Nil(chunk)
+}
+
+//func (s *ConnTestSuite) TestReadStreamTimeout() {
+//    c1, c2 := net.Pipe()
+//    reader := NewConn(c2)
+//    reader.SetStreamReadTimeout(500 * time.Millisecond)
+//
+//    id := rand.Int63()
+//    streamMeta := []byte("stream meta info")
+//    rawMsg := sppp.NewMessage(id, sppp.StreamType, streamMeta).Marshal()
+//    _, _  = c1.Write(rawMsg[:])
+//
+//    stream, errs := reader.ReadStream()
+//    <- stream
+//
+//    select {
+//    case err := <- errs:
+//        s.Require().EqualError(err, TimeoutError.Error())
+//    case <- time.After(700 * time.Millisecond):
+//        s.Fail("timeout must occur")
+//    }
+//}
