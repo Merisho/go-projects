@@ -14,12 +14,12 @@ var (
 
 func NewConn(c net.Conn) *Conn {
     conn := &Conn{
-        Conn:          c,
-        textMsgChan:   make(chan sppp.Message, 1024),
-        streamsChan:   make(chan sppp.Message, 1024),
-        streams:       make(map[int64]Stream),
+        Conn:           c,
+        textMsgChan:    make(chan sppp.Message, 1024),
+        newStreamsChan: make(chan Stream, 1024),
+        streams:        make(map[int64]Stream),
         msgReadTimeout: 5 * time.Second,
-        txtBuffer: NewTextMessageBuffer(),
+        txtBuffer:      NewTextMessageBuffer(),
     }
 
     conn.startReading()
@@ -30,15 +30,15 @@ func NewConn(c net.Conn) *Conn {
 
 type Conn struct {
     net.Conn
+
     textMsgChan   chan sppp.Message
     msgReadTimeout time.Duration
-    streamReadTimeout time.Duration
-
     txtBuffer *TextMessageBuffer
 
-    streamsMutex sync.Mutex
-    streamsChan chan sppp.Message
-    streams map[int64]Stream
+    streamReadTimeout time.Duration
+    streamsMutex   sync.Mutex
+    newStreamsChan chan Stream
+    streams        map[int64]Stream
 }
 
 func (c *Conn) ReadMsg() (sppp.Message, error) {
@@ -46,23 +46,26 @@ func (c *Conn) ReadMsg() (sppp.Message, error) {
 }
 
 func (c *Conn) ReadStream() (chan []byte, chan error) {
-    chunks := make(chan []byte, 1)
-    errs := make(chan error, 1)
+    chunks := make(chan []byte)
+    errs := make(chan error)
 
-    msg := <- c.streamsChan
+    stream := <- c.newStreamsChan
 
     go func() {
         loop:
         for {
             select {
-            case m, ok := <- c.streams[msg.ID].stream:
+            case m, ok := <- stream.stream:
                 if !ok {
                     break loop
                 }
 
                 chunks <- m.Content
-            case err := <- c.streams[msg.ID].errors:
-                errs <- err
+            case err, ok := <- stream.errors:
+                if ok {
+                    errs <- err
+                }
+
                 break loop
             }
         }
@@ -99,10 +102,10 @@ func (c *Conn) startReading() {
             switch msg.Type {
             case sppp.TextType:
                 c.handleTextMessage(msg)
-            case sppp.EndType:
-                c.handleMessageEnd(msg)
             case sppp.StreamType:
                 c.handleStreamMessage(msg)
+            case sppp.EndType:
+                c.handleMessageEnd(msg)
             }
         }
     }()
@@ -111,11 +114,8 @@ func (c *Conn) startReading() {
 func (c *Conn) startTimeoutsHandling() {
     go func() {
         txtMsgTimeouts := c.txtBuffer.Timeouts()
-        for {
-            select {
-            case id := <- txtMsgTimeouts:
-                c.writeTimeout(id)
-            }
+        for id := range txtMsgTimeouts {
+            c.writeTimeout(id)
         }
     }()
 }
@@ -125,17 +125,22 @@ func (c *Conn) handleTextMessage(msg sppp.Message) {
 }
 
 func (c *Conn) handleStreamMessage(msg sppp.Message) {
+    c.streamsMutex.Lock()
+    defer c.streamsMutex.Unlock()
+
     s, ok := c.streams[msg.ID]
     if ok {
         s.stream <- msg
     } else {
         c.deleteStreamAfterTimeout(msg)
-        c.streams[msg.ID] = Stream{
+        s := Stream{
             stream: make(chan sppp.Message, 1024),
             errors: make(chan error, 1024),
         }
-        c.streams[msg.ID].stream <- msg
-        c.streamsChan <- msg
+        s.stream <- msg
+        c.newStreamsChan <- s
+
+        c.streams[msg.ID] = s
     }
 }
 

@@ -10,7 +10,9 @@ import (
 )
 
 func TestConn(t *testing.T) {
-    suite.Run(t, new(ConnTestSuite))
+    for i := 0; i < 5; i++ {
+        suite.Run(t, new(ConnTestSuite))
+    }
 }
 
 type ConnTestSuite struct {
@@ -40,7 +42,7 @@ func (s *ConnTestSuite) TestMsgRead() {
 func (s *ConnTestSuite) TestMsgReadTimeout() {
    c1, c2 := net.Pipe()
    reader := NewConn(c2)
-   reader.SetMessageReadTimeout(500 * time.Millisecond)
+   reader.SetMessageReadTimeout(50 * time.Millisecond)
 
    id := rand.Int63()
    rawMsg := sppp.NewMessage(id, sppp.TextType, []byte("test")).Marshal()
@@ -55,7 +57,7 @@ func (s *ConnTestSuite) TestMsgReadTimeout() {
    select {
    case <- msgChan:
        s.Fail("Must not receive a message")
-   case <- time.After(500 * time.Millisecond):
+   case <- time.After(60 * time.Millisecond):
    }
 
    var rawTimeoutResponse [1024]byte
@@ -68,39 +70,39 @@ func (s *ConnTestSuite) TestMsgReadTimeout() {
 }
 
 func (s *ConnTestSuite) TestReadStream() {
-    c1, c2 := net.Pipe()
-    reader := NewConn(c2)
+   c1, c2 := net.Pipe()
+   reader := NewConn(c2)
 
-    id := rand.Int63()
-    streamMeta := []byte("stream meta info")
-    rawMsg := sppp.NewMessage(id, sppp.StreamType, streamMeta).Marshal()
-    _, _  = c1.Write(rawMsg[:])
+   id := rand.Int63()
+   streamMeta := []byte("stream meta info")
+   rawMsg := sppp.NewMessage(id, sppp.StreamType, streamMeta).Marshal()
+   _, _  = c1.Write(rawMsg[:])
 
-    streamData := []byte("chunk 1")
-    rawMsg = sppp.NewMessage(id, sppp.StreamType, streamData).Marshal()
-    _, _  = c1.Write(rawMsg[:])
+   streamData := []byte("chunk 1")
+   rawMsg = sppp.NewMessage(id, sppp.StreamType, streamData).Marshal()
+   _, _  = c1.Write(rawMsg[:])
 
-    streamData = []byte("chunk 2")
-    rawMsg = sppp.NewMessage(id, sppp.StreamType, streamData).Marshal()
-    _, _  = c1.Write(rawMsg[:])
+   streamData = []byte("chunk 2")
+   rawMsg = sppp.NewMessage(id, sppp.StreamType, streamData).Marshal()
+   _, _  = c1.Write(rawMsg[:])
 
-    stream, _ := reader.ReadStream()
+   stream, _ := reader.ReadStream()
 
-    meta := <- stream
-    s.Require().Equal("stream meta info", string(meta))
+   meta := <- stream
+   s.Require().Equal("stream meta info", string(meta))
 
-    chunk := <- stream
-    s.Require().Equal("chunk 1", string(chunk))
+   chunk := <- stream
+   s.Require().Equal("chunk 1", string(chunk))
 
-    chunk = <- stream
-    s.Require().Equal("chunk 2", string(chunk))
+   chunk = <- stream
+   s.Require().Equal("chunk 2", string(chunk))
 
-    rawMsg = sppp.NewMessage(id, sppp.EndType, nil).Marshal()
-    _, _  = c1.Write(rawMsg[:])
+   rawMsg = sppp.NewMessage(id, sppp.EndType, nil).Marshal()
+   _, _  = c1.Write(rawMsg[:])
 
-    chunk, ok := <- stream
-    s.Require().False(ok)
-    s.Require().Nil(chunk)
+   chunk, ok := <- stream
+   s.Require().False(ok)
+   s.Require().Nil(chunk)
 }
 
 //func (s *ConnTestSuite) TestReadStreamTimeout() {
