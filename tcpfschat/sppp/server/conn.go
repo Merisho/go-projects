@@ -132,11 +132,13 @@ func (c *Conn) handleStreamMessage(msg sppp.Message) {
     if ok {
         s.stream <- msg
     } else {
-        c.deleteStreamAfterTimeout(msg)
         s := Stream{
+            msgID:  msg.ID,
             stream: make(chan sppp.Message, 1024),
-            errors: make(chan error, 1024),
+            errors: make(chan error),
+            sig: make(chan struct{}, 1024),
         }
+        c.deleteStreamAfterTimeout(s)
         s.stream <- msg
         c.newStreamsChan <- s
 
@@ -151,28 +153,39 @@ func (c *Conn) handleMessageEnd(msg sppp.Message) {
         return
     }
 
-    c.tryRemoveStream(msg)
+    c.removeStream(msg.ID)
 }
 
-func (c *Conn) tryRemoveStream(msg sppp.Message) {
-    c.streamsMutex.Lock()
-    defer c.streamsMutex.Unlock()
-
-    s, ok := c.streams[msg.ID]
-    if ok {
-        s.Close()
-        delete(c.streams, msg.ID)
-    }
-}
-
-func (c *Conn) deleteStreamAfterTimeout(msg sppp.Message) {
+func (c *Conn) deleteStreamAfterTimeout(s Stream) {
     if c.streamReadTimeout == 0 {
         return
     }
 
     go func() {
-        panic("implement stream timeouts")
+        for {
+            select {
+            case <- time.After(c.streamReadTimeout):
+                s.errors <- TimeoutError
+                c.writeTimeout(s.msgID)
+                c.removeStream(s.msgID)
+            case _, ok := <- s.sig:
+                if !ok {
+                    return
+                }
+            }
+        }
     }()
+}
+
+func (c *Conn) removeStream(msgID int64) {
+    c.streamsMutex.Lock()
+    defer c.streamsMutex.Unlock()
+
+    s, ok := c.streams[msgID]
+    if ok {
+        s.Close()
+        delete(c.streams, msgID)
+    }
 }
 
 func (c *Conn) writeTimeout(id int64) {
@@ -183,11 +196,14 @@ func (c *Conn) writeTimeout(id int64) {
 }
 
 type Stream struct {
+    msgID  int64
     stream chan sppp.Message
     errors chan error
+    sig    chan struct{}
 }
 
 func (s Stream) Close() {
     close(s.stream)
     close(s.errors)
+    close(s.sig)
 }
