@@ -6,7 +6,7 @@ import (
     "testing"
 )
 
-func TestSPPP(t *testing.T) {
+func TestSPPPMessages(t *testing.T) {
     suite.Run(t, new(SPPPTestSuite))
 }
 
@@ -111,4 +111,13 @@ func (s *SPPPTestSuite) TestMarshal() {
 
     b := msg.Marshal()
     s.EqualValues(rawMsg, b)
+}
+
+func (s *SPPPTestSuite) TestSplitIntoMessages() {
+    msgContentChunks := 5
+    msg := []byte(strings.Repeat("a", msgContentSize * msgContentChunks))
+
+    msgs := SplitIntoMessages(0, TextType, msg)
+
+    s.Require().Len(msgs, msgContentChunks)
 }

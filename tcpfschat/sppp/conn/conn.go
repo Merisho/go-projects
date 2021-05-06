@@ -3,6 +3,8 @@ package conn
 import (
     "errors"
     "github.com/merisho/tcp-fs-chat/sppp"
+    "log"
+    "math/rand"
     "net"
     "sync"
     "time"
@@ -16,10 +18,11 @@ func NewConn(c net.Conn) *Conn {
     conn := &Conn{
         Conn:           c,
         textMsgChan:    make(chan sppp.Message, 1024),
-        newStreamsChan: make(chan Stream, 1024),
-        streams:        make(map[int64]Stream),
+        newStreamsChan: make(chan *Stream, 128),
+        streams:        make(map[int64]*Stream),
         msgReadTimeout: 5 * time.Second,
         txtBuffer:      NewTextMessageBuffer(),
+        rand:           rand.New(rand.NewSource(time.Now().Unix())),
     }
 
     conn.startReading()
@@ -37,44 +40,17 @@ type Conn struct {
 
     streamReadTimeout time.Duration
     streamsMutex   sync.Mutex
-    newStreamsChan chan Stream
-    streams        map[int64]Stream
+    newStreamsChan chan *Stream
+    streams        map[int64]*Stream
+    rand           *rand.Rand
 }
 
 func (c *Conn) ReadMsg() (sppp.Message, error) {
     return <- c.textMsgChan, nil
 }
 
-func (c *Conn) ReadStream() (chan []byte, chan error) {
-    chunks := make(chan []byte)
-    errs := make(chan error)
-
-    stream := <- c.newStreamsChan
-
-    go func() {
-        loop:
-        for {
-            select {
-            case m, ok := <- stream.stream:
-                if !ok {
-                    break loop
-                }
-
-                chunks <- m.Content
-            case err, ok := <- stream.errors:
-                if ok {
-                    errs <- err
-                }
-
-                break loop
-            }
-        }
-
-        close(chunks)
-        close(errs)
-    }()
-
-    return chunks, errs
+func (c *Conn) ReadStream() *Stream {
+    return <- c.newStreamsChan
 }
 
 func (c *Conn) SetMessageReadTimeout(d time.Duration) {
@@ -132,16 +108,12 @@ func (c *Conn) handleStreamMessage(msg sppp.Message) {
 
     s, ok := c.streams[msg.ID]
     if ok {
-        s.stream <- msg
+        s.feed(msg)
     } else {
-        s := Stream{
-            msgID:  msg.ID,
-            stream: make(chan sppp.Message, 1024),
-            errors: make(chan error),
-            sig: make(chan struct{}, 1024),
-        }
+        s := NewStream(msg.ID, c.streamReadTimeout)
+        s.feed(msg)
+
         c.deleteStreamAfterTimeout(s)
-        s.stream <- msg
         c.newStreamsChan <- s
 
         c.streams[msg.ID] = s
@@ -158,24 +130,15 @@ func (c *Conn) handleMessageEnd(msg sppp.Message) {
     c.removeStream(msg.ID)
 }
 
-func (c *Conn) deleteStreamAfterTimeout(s Stream) {
-    if c.streamReadTimeout == 0 {
-        return
-    }
-
+func (c *Conn) deleteStreamAfterTimeout(s *Stream) {
     go func() {
-        for {
-            select {
-            case <- time.After(c.streamReadTimeout):
-                s.errors <- TimeoutError
-                c.writeTimeout(s.msgID)
-                c.removeStream(s.msgID)
-            case _, ok := <- s.sig:
-                if !ok {
-                    return
-                }
-            }
+        _, ok := <- s.ReadTimeoutWait()
+        if !ok {
+            return
         }
+        
+        c.writeTimeout(s.msgID)
+        c.removeStream(s.msgID)
     }()
 }
 
@@ -185,7 +148,11 @@ func (c *Conn) removeStream(msgID int64) {
 
     s, ok := c.streams[msgID]
     if ok {
-        s.Close()
+        err := s.Close()
+        if err != nil {
+            log.Fatalf("Could not close stream: %s", err)
+        }
+
         delete(c.streams, msgID)
     }
 }
@@ -197,15 +164,36 @@ func (c *Conn) writeTimeout(id int64) {
     _, _ = c.Conn.Write(rawTimeoutMsg[:])
 }
 
-type Stream struct {
-    msgID  int64
-    stream chan sppp.Message
-    errors chan error
-    sig    chan struct{}
+func (c *Conn) WriteMsg(rawMsg []byte) error {
+    id := c.rand.Int63()
+    msgs := sppp.SplitIntoMessages(id, sppp.TextType, rawMsg)
+    msgs = append(msgs, sppp.NewMessage(id, sppp.EndType, nil))
+
+    for _, m := range msgs {
+        rawMsg := m.Marshal()
+        _, err := c.Write(rawMsg[:])
+        if err != nil {
+            return err
+        }
+    }
+
+    return nil
 }
 
-func (s Stream) Close() {
-    close(s.stream)
-    close(s.errors)
-    close(s.sig)
+func (c *Conn) WriteStream(meta []byte) (*Stream, error) {
+    id := c.rand.Int63()
+
+    s := NewStream(id, c.streamReadTimeout)
+    s.write = func(message sppp.Message) error {
+        raw := message.Marshal()
+        _, err := c.Write(raw[:])
+        return err
+    }
+
+    err := s.WriteData(meta)
+    if err != nil {
+        return nil, err
+    }
+
+    return s, nil
 }

@@ -1,6 +1,8 @@
 package sppp
 
-import "errors"
+import (
+    "errors"
+)
 
 // The message is 1024 bytes
 // 1 byte - type
@@ -11,6 +13,7 @@ import "errors"
 const (
     headerSize = 17
     totalMsgSize = 1024
+    msgContentSize = totalMsgSize - headerSize
 )
 
 var (
@@ -79,4 +82,26 @@ func (m Message) Marshal() [1024]byte {
 
 func (m Message) Empty() bool {
     return m.Type == 0 && m.Size == 0 && m.ID == 0
+}
+
+func SplitIntoMessages(id int64, t MessageType, msg []byte) []Message {
+    var msgs []Message
+
+    ln := len(msg)
+    for i := 0; i < ln; i += msgContentSize {
+        end := i + msgContentSize
+        if end > ln {
+            end = ln
+        }
+
+        m := Message{
+            Type:    t,
+            Size:    int64(len(msg[i:end])),
+            ID:      id,
+            Content: msg[i:end],
+        }
+        msgs = append(msgs, m)
+    }
+
+    return msgs
 }

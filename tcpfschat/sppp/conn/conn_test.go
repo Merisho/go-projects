@@ -1,8 +1,10 @@
 package conn
 
 import (
+    "bytes"
     "github.com/merisho/tcp-fs-chat/sppp"
     "github.com/stretchr/testify/suite"
+    "io"
     "math/rand"
     "net"
     "testing"
@@ -10,7 +12,9 @@ import (
 )
 
 func TestConn(t *testing.T) {
-    suite.Run(t, new(ConnTestSuite))
+    for i := 0; i < 100; i++ {
+        suite.Run(t, new(ConnTestSuite))
+    }
 }
 
 type ConnTestSuite struct {
@@ -89,55 +93,55 @@ func (s *ConnTestSuite) TestReadStream() {
     rawMsg = sppp.NewMessage(id, sppp.StreamType, streamData).Marshal()
     _, _  = c1.Write(rawMsg[:])
 
-    stream, _ := reader.ReadStream()
+    stream := reader.ReadStream()
 
-    meta := <- stream
+    meta, err := stream.ReadData()
+    s.Require().NoError(err)
     s.Require().Equal("stream meta info", string(meta))
 
-    chunk := <- stream
+    chunk, err := stream.ReadData()
+    s.Require().NoError(err)
     s.Require().Equal("chunk 1", string(chunk))
 
-    chunk = <- stream
+    chunk, err = stream.ReadData()
+    s.Require().NoError(err)
     s.Require().Equal("chunk 2", string(chunk))
 
     rawMsg = sppp.NewMessage(id, sppp.EndType, nil).Marshal()
     _, _  = c1.Write(rawMsg[:])
 
-    chunk, ok := <- stream
-    s.Require().False(ok)
+    chunk, err = stream.ReadData()
+    s.Require().Equal(io.EOF, err)
     s.Require().Nil(chunk)
 }
 
 func (s *ConnTestSuite) TestReadStreamTimeout() {
-    c1, c2 := net.Pipe()
-    reader := NewConn(c2)
-    reader.SetStreamReadTimeout(50 * time.Millisecond)
+   c1, c2 := net.Pipe()
+   reader := NewConn(c2)
+   reader.SetStreamReadTimeout(50 * time.Millisecond)
 
-    test := func() {
-        id := s.rand.Int63()
-        streamMeta := []byte("stream meta info")
-        rawMsg := sppp.NewMessage(id, sppp.StreamType, streamMeta).Marshal()
-        _, _  = c1.Write(rawMsg[:])
+   test := func() {
+       id := s.rand.Int63()
+       streamMeta := []byte("stream meta info")
+       rawMsg := sppp.NewMessage(id, sppp.StreamType, streamMeta).Marshal()
+       _, _  = c1.Write(rawMsg[:])
 
-        stream, errs := reader.ReadStream()
-        <- stream
-
-        select {
-        case err := <- errs:
-            s.Require().EqualError(err, TimeoutError.Error())
-        case <- time.After(70 * time.Millisecond):
-            s.Fail("timeout must occur")
-        }
-
-        var timeoutRes [1024]byte
-        _, _ = c1.Read(timeoutRes[:])
-        timeoutMsg, err := sppp.UnmarshalMessage(timeoutRes)
+       stream := reader.ReadStream()
+       _, err := stream.ReadData()
         s.Require().NoError(err)
-        s.Require().EqualValues(sppp.TimeoutType, timeoutMsg.Type)
-    }
 
-    test()
-    test()
+       _, err = stream.ReadData()
+       s.Require().Equal(TimeoutError, err)
+
+       var timeoutRes [1024]byte
+       _, _ = c1.Read(timeoutRes[:])
+       timeoutMsg, err := sppp.UnmarshalMessage(timeoutRes)
+       s.Require().NoError(err)
+       s.Require().EqualValues(sppp.TimeoutType, timeoutMsg.Type)
+   }
+
+   test()
+   test()
 }
 
 func (s *ConnTestSuite) TestHandleInvalidMessage() {
@@ -166,4 +170,56 @@ func (s *ConnTestSuite) TestHandleInvalidMessage() {
     timeoutRes, err := sppp.UnmarshalMessage(rawInvalidMsgResponse)
     s.Require().NoError(err)
     s.Require().EqualValues(sppp.ErrorType, timeoutRes.Type)
+}
+
+func (s *ConnTestSuite) TestWriteMessage() {
+    c1, c2 := net.Pipe()
+    writer := NewConn(c1)
+    reader := NewConn(c2)
+
+    rawMsg := bytes.Repeat([]byte("test"), 1024)
+    err := writer.WriteMsg(rawMsg)
+    s.Require().NoError(err)
+
+    msg, err := reader.ReadMsg()
+    s.Require().NoError(err)
+    s.Require().Equal(rawMsg, msg.Content)
+}
+
+func (s *ConnTestSuite) TestWriteStream() {
+   c1, c2 := net.Pipe()
+   writer := NewConn(c1)
+   reader := NewConn(c2)
+
+   metaInfo := []byte("stream meta info")
+   ws, err := writer.WriteStream(metaInfo)
+   s.Require().NoError(err)
+
+   err = ws.WriteData([]byte("chunk 1"))
+   s.Require().NoError(err)
+
+   err = ws.WriteData([]byte("chunk 2"))
+   s.Require().NoError(err)
+
+   err = ws.Close()
+   s.Require().NoError(err)
+
+   rs := reader.ReadStream()
+   s.Require().NoError(err)
+
+   chunk, err := rs.ReadData()
+   s.Require().NoError(err)
+   s.Require().Equal("stream meta info", string(chunk))
+
+   chunk, err = rs.ReadData()
+   s.Require().NoError(err)
+   s.Require().Equal("chunk 1", string(chunk))
+
+   chunk, err = rs.ReadData()
+   s.Require().NoError(err)
+   s.Require().Equal("chunk 2", string(chunk))
+
+   chunk, err = rs.ReadData()
+   s.Require().Equal(io.EOF, err)
+   s.Require().Nil(chunk)
 }
