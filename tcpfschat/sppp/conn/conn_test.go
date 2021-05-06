@@ -12,9 +12,7 @@ import (
 )
 
 func TestConn(t *testing.T) {
-    for i := 0; i < 100; i++ {
-        suite.Run(t, new(ConnTestSuite))
-    }
+    suite.Run(t, new(ConnTestSuite))
 }
 
 type ConnTestSuite struct {
