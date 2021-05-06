@@ -49,7 +49,7 @@ func (c *Conn) ReadMsg() (sppp.Message, error) {
     return <- c.textMsgChan, nil
 }
 
-func (c *Conn) ReadStream() *Stream {
+func (c *Conn) ReadStream() ReadStream {
     return <- c.newStreamsChan
 }
 
@@ -180,7 +180,7 @@ func (c *Conn) WriteMsg(rawMsg []byte) error {
     return nil
 }
 
-func (c *Conn) WriteStream(meta []byte) (*Stream, error) {
+func (c *Conn) WriteStream(meta []byte) (WriteStream, error) {
     id := c.rand.Int63()
 
     s := NewStream(id, c.streamReadTimeout)
