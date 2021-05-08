@@ -14,5 +14,5 @@ func Serve(port uint16) (*Server, error) {
 
     sp := sppp.NewSPPPListener(listener)
 
-    return NewServer(sp), nil
+    return newServer(sp), nil
 }

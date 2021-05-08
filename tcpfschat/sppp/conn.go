@@ -48,6 +48,10 @@ func (c *Conn) ReadMsg() (Message, error) {
     return <- c.textMsgChan, nil
 }
 
+func (c *Conn) MsgCount() int {
+    return len(c.textMsgChan)
+}
+
 func (c *Conn) ReadStream() ReadStream {
     return <- c.newStreamsChan
 }

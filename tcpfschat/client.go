@@ -1,10 +1,11 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
-	"github.com/merisho/tcp-fs-chat/client"
+	"github.com/merisho/tcp-fs-chat/sppp"
+	"io"
 	"log"
+	"net"
 	"os"
 	"strconv"
 )
@@ -26,32 +27,88 @@ func main() {
 		port = uint16(p)
 	}
 
-	c, err := client.ConnectTCP(host, port)
+	d, err := net.Dial("tcp", fmt.Sprintf("%s:%d", host, port))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	if len(os.Args) >= 4 {
-		c.SetName(os.Args[3])
-	}
+	c := sppp.NewConn(d)
+
 
 	go func() {
-		msgs := c.Receive()
-		for msg := range msgs {
-			fmt.Println(msg)
+		for {
+			s := c.ReadStream()
+
+			meta, err := s.ReadData()
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			fileName := string(meta)
+			fmt.Println("Client accepting:", fileName)
+
+			f, err := os.OpenFile(fileName, os.O_CREATE, 0777)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			b, err := s.ReadData()
+			for err == nil {
+				_, err = f.Write(b)
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				b, err = s.ReadData()
+			}
+
+			if err != io.EOF {
+				log.Fatal(err)
+			}
 		}
 	}()
 
-	r := bufio.NewReader(os.Stdin)
-	for {
-		b, _, err := r.ReadLine()
+	s, err := c.WriteStream([]byte("file.mp4"))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	f, err := os.Open("d:\\Memories\\Feeling Good by Me.mp4")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	b := make([]byte, 2048)
+
+	n, err := f.Read(b)
+	for err == nil {
+		err = s.WriteData(b[:n])
 		if err != nil {
-			log.Fatal(err)
+			break
 		}
 
-		err = c.Send(string(b))
-		if err != nil {
-			log.Fatal(err)
-		}
+		n, err = f.Read(b)
 	}
+
+	if err != io.EOF {
+		log.Fatal(err)
+	}
+
+	err = s.Close()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	//r := bufio.NewReader(os.Stdin)
+	//for {
+	//	b, _, err := r.ReadLine()
+	//	if err != nil {
+	//		log.Fatal(err)
+	//	}
+	//
+	//	err = c.WriteMsg(b)
+	//	if err != nil {
+	//		log.Fatal(err)
+	//	}
+	//}
 }

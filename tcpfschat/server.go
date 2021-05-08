@@ -6,7 +6,7 @@ import (
 )
 
 func main() {
-	_, err := server.ServeTCP(1337)
+	_, err := server.Serve(1337)
 	if err != nil {
 		log.Fatal(err)
 	}
