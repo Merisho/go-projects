@@ -1,7 +1,7 @@
 package connections
 
 import (
-	"github.com/merisho/tcp-fs-chat/test"
+    "github.com/merisho/tcp-fs-chat/test"
 	"github.com/stretchr/testify/assert"
 	"io"
 	"net"

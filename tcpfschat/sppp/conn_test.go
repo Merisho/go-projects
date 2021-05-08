@@ -1,8 +1,7 @@
-package conn
+package sppp
 
 import (
     "bytes"
-    "github.com/merisho/tcp-fs-chat/sppp"
     "github.com/stretchr/testify/suite"
     "io"
     "math/rand"
@@ -30,13 +29,13 @@ func (s *ConnTestSuite) TestMsgRead() {
 
     id := s.rand.Int63()
 
-    rawMsg := sppp.NewMessage(id, sppp.TextType, []byte("test")).Marshal()
+    rawMsg := NewMessage(id, TextType, []byte("test")).Marshal()
     _, _ = c1.Write(rawMsg[:])
 
-    rawMsg = sppp.NewMessage(id, sppp.TextType, []byte(" message")).Marshal()
+    rawMsg = NewMessage(id, TextType, []byte(" message")).Marshal()
     _, _ = c1.Write(rawMsg[:])
 
-    rawMsg = sppp.NewMessage(id, sppp.EndType, nil).Marshal()
+    rawMsg = NewMessage(id, EndType, nil).Marshal()
     _, _ = c1.Write(rawMsg[:])
 
     msg, err := reader.ReadMsg()
@@ -50,10 +49,10 @@ func (s *ConnTestSuite) TestMsgReadTimeout() {
     reader.SetMessageReadTimeout(50 * time.Millisecond)
 
     id := s.rand.Int63()
-    rawMsg := sppp.NewMessage(id, sppp.TextType, []byte("test")).Marshal()
+    rawMsg := NewMessage(id, TextType, []byte("test")).Marshal()
     _, _ = c1.Write(rawMsg[:])
 
-    msgChan := make(chan sppp.Message)
+    msgChan := make(chan Message)
     go func() {
        m, _ := reader.ReadMsg()
        msgChan <- m
@@ -68,9 +67,9 @@ func (s *ConnTestSuite) TestMsgReadTimeout() {
     var rawTimeoutResponse [1024]byte
     _, _ = c1.Read(rawTimeoutResponse[:])
 
-    timeoutRes, err := sppp.UnmarshalMessage(rawTimeoutResponse)
+    timeoutRes, err := UnmarshalMessage(rawTimeoutResponse)
     s.Require().NoError(err)
-    s.Require().EqualValues(sppp.TimeoutType, timeoutRes.Type)
+    s.Require().EqualValues(TimeoutType, timeoutRes.Type)
     s.Require().Equal(id, timeoutRes.ID)
 }
 
@@ -80,15 +79,15 @@ func (s *ConnTestSuite) TestReadStream() {
 
     id := s.rand.Int63()
     streamMeta := []byte("stream meta info")
-    rawMsg := sppp.NewMessage(id, sppp.StreamType, streamMeta).Marshal()
+    rawMsg := NewMessage(id, StreamType, streamMeta).Marshal()
     _, _  = c1.Write(rawMsg[:])
 
     streamData := []byte("chunk 1")
-    rawMsg = sppp.NewMessage(id, sppp.StreamType, streamData).Marshal()
+    rawMsg = NewMessage(id, StreamType, streamData).Marshal()
     _, _  = c1.Write(rawMsg[:])
 
     streamData = []byte("chunk 2")
-    rawMsg = sppp.NewMessage(id, sppp.StreamType, streamData).Marshal()
+    rawMsg = NewMessage(id, StreamType, streamData).Marshal()
     _, _  = c1.Write(rawMsg[:])
 
     stream := reader.ReadStream()
@@ -105,7 +104,7 @@ func (s *ConnTestSuite) TestReadStream() {
     s.Require().NoError(err)
     s.Require().Equal("chunk 2", string(chunk))
 
-    rawMsg = sppp.NewMessage(id, sppp.EndType, nil).Marshal()
+    rawMsg = NewMessage(id, EndType, nil).Marshal()
     _, _  = c1.Write(rawMsg[:])
 
     chunk, err = stream.ReadData()
@@ -121,7 +120,7 @@ func (s *ConnTestSuite) TestReadStreamTimeout() {
    test := func() {
        id := s.rand.Int63()
        streamMeta := []byte("stream meta info")
-       rawMsg := sppp.NewMessage(id, sppp.StreamType, streamMeta).Marshal()
+       rawMsg := NewMessage(id, StreamType, streamMeta).Marshal()
        _, _  = c1.Write(rawMsg[:])
 
        stream := reader.ReadStream()
@@ -133,9 +132,9 @@ func (s *ConnTestSuite) TestReadStreamTimeout() {
 
        var timeoutRes [1024]byte
        _, _ = c1.Read(timeoutRes[:])
-       timeoutMsg, err := sppp.UnmarshalMessage(timeoutRes)
+       timeoutMsg, err := UnmarshalMessage(timeoutRes)
        s.Require().NoError(err)
-       s.Require().EqualValues(sppp.TimeoutType, timeoutMsg.Type)
+       s.Require().EqualValues(TimeoutType, timeoutMsg.Type)
    }
 
    test()
@@ -150,7 +149,7 @@ func (s *ConnTestSuite) TestHandleInvalidMessage() {
     rawMsg := []byte("a garbage message")
     _, _ = c1.Write(rawMsg[:])
 
-    msgChan := make(chan sppp.Message)
+    msgChan := make(chan Message)
     go func() {
         m, _ := reader.ReadMsg()
         msgChan <- m
@@ -165,9 +164,9 @@ func (s *ConnTestSuite) TestHandleInvalidMessage() {
     var rawInvalidMsgResponse [1024]byte
     _, _ = c1.Read(rawInvalidMsgResponse[:])
 
-    timeoutRes, err := sppp.UnmarshalMessage(rawInvalidMsgResponse)
+    timeoutRes, err := UnmarshalMessage(rawInvalidMsgResponse)
     s.Require().NoError(err)
-    s.Require().EqualValues(sppp.ErrorType, timeoutRes.Type)
+    s.Require().EqualValues(ErrorType, timeoutRes.Type)
 }
 
 func (s *ConnTestSuite) TestWriteMessage() {

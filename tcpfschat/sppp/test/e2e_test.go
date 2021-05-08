@@ -1,8 +1,7 @@
 package test
 
 import (
-    "github.com/merisho/tcp-fs-chat/sppp/conn"
-    "github.com/merisho/tcp-fs-chat/sppp/server"
+    "github.com/merisho/tcp-fs-chat/sppp"
     "github.com/stretchr/testify/suite"
     "io"
     "net"
@@ -21,12 +20,12 @@ func (s *E2ESPPPTestSuite) TestMessages() {
     tcp, err := net.Listen("tcp", ":7357")
     s.Require().NoError(err)
 
-    srv := server.NewSPPPServer(tcp)
+    srv := sppp.NewSPPPListener(tcp)
 
     c, err := net.Dial("tcp", ":7357")
     s.Require().NoError(err)
 
-    client := conn.NewConn(c)
+    client := sppp.NewConn(c)
 
     srvConn, err := srv.Accept()
     s.Require().NoError(err)
@@ -38,24 +37,24 @@ func (s *E2ESPPPTestSuite) TestMessages() {
     s.Require().NoError(err)
     s.Require().Equal("Hello World!", string(msg.Content))
 
-    err = srvConn.WriteMsg([]byte("Server Message"))
+    err = srvConn.WriteMsg([]byte("Listener Message"))
     s.Require().NoError(err)
 
     msg, err = client.ReadMsg()
     s.Require().NoError(err)
-    s.Require().Equal("Server Message", string(msg.Content))
+    s.Require().Equal("Listener Message", string(msg.Content))
 }
 
 func (s *E2ESPPPTestSuite) TestStreams() {
     tcp, err := net.Listen("tcp", ":7358")
     s.Require().NoError(err)
 
-    srv := server.NewSPPPServer(tcp)
+    srv := sppp.NewSPPPListener(tcp)
 
     c, err := net.Dial("tcp", ":7358")
     s.Require().NoError(err)
 
-    client := conn.NewConn(c)
+    client := sppp.NewConn(c)
 
     ws, err := client.WriteStream([]byte("stream meta"))
     s.Require().NoError(err)
@@ -89,3 +88,20 @@ func (s *E2ESPPPTestSuite) TestStreams() {
     s.Require().Equal(io.EOF, err)
     s.Require().Nil(chunk)
 }
+
+//func (s *E2ESPPPTestSuite) TestConnectionClose() {
+//    tcp, err := net.Listen("tcp", ":7359")
+//    s.Require().NoError(err)
+//
+//    srv := listener.NewSPPPListener(tcp)
+//
+//    c, err := net.Dial("tcp", ":7359")
+//    s.Require().NoError(err)
+//
+//    client := conn.NewConn(c)
+//
+//    srvConn, err := srv.Accept()
+//    s.Require().NoError(err)
+//
+//    client.Close()
+//}

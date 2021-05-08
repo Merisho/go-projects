@@ -1,25 +1,24 @@
-package conn
+package sppp
 
 import (
-    "github.com/merisho/tcp-fs-chat/sppp"
     "sync"
     "time"
 )
 
 func NewTextMessageBuffer() *TextMessageBuffer {
     return &TextMessageBuffer{
-        buffer: make(map[int64]sppp.Message),
+        buffer: make(map[int64]Message),
         timeouts: make(chan int64),
     }
 }
 
 type TextMessageBuffer struct {
-    buffer map[int64]sppp.Message
+    buffer map[int64]Message
     mutex sync.Mutex
     timeouts chan int64
 }
 
-func (b *TextMessageBuffer) Message(msg sppp.Message, timeout time.Duration) {
+func (b *TextMessageBuffer) Message(msg Message, timeout time.Duration) {
     b.mutex.Lock()
     defer b.mutex.Unlock()
 
@@ -34,12 +33,12 @@ func (b *TextMessageBuffer) Message(msg sppp.Message, timeout time.Duration) {
     }
 }
 
-func (b *TextMessageBuffer) EndMessage(msg sppp.Message) sppp.Message {
+func (b *TextMessageBuffer) EndMessage(msg Message) Message {
     b.mutex.Lock()
     m, ok := b.buffer[msg.ID]
     b.mutex.Unlock()
     if !ok {
-        return sppp.Message{}
+        return Message{}
     }
 
     b.deleteBuffer(msg.ID)
@@ -51,7 +50,7 @@ func (b *TextMessageBuffer) Timeouts() <- chan int64 {
     return b.timeouts
 }
 
-func (b *TextMessageBuffer) deleteBufferOnTimeout(m sppp.Message, timeout time.Duration) {
+func (b *TextMessageBuffer) deleteBufferOnTimeout(m Message, timeout time.Duration) {
     go func() {
         time.Sleep(timeout)
 

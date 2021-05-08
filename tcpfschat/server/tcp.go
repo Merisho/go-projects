@@ -1,15 +1,18 @@
 package server
 
 import (
+    "github.com/merisho/tcp-fs-chat/sppp"
     "net"
     "strconv"
 )
 
-func ServeTCP(port uint16) (*Server, error) {
+func Serve(port uint16) (*Server, error) {
     listener, err := net.Listen("tcp", ":" + strconv.FormatUint(uint64(port), 10))
     if err != nil {
-        return &Server{}, err
+        return nil, err
     }
 
-    return NewServer(listener), nil
+    sp := sppp.NewSPPPListener(listener)
+
+    return NewServer(sp), nil
 }

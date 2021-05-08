@@ -1,8 +1,7 @@
-package conn
+package sppp
 
 import (
     "fmt"
-    "github.com/merisho/tcp-fs-chat/sppp"
     "io"
     "time"
 )
@@ -20,14 +19,14 @@ type WriteStream interface {
 func NewStream(msgID int64, readTimeout time.Duration) *Stream {
     s := &Stream{
         msgID:           msgID,
-        readChunks:      make(chan sppp.Message, 1024),
+        readChunks:      make(chan Message, 1024),
         readErrs:        make(chan error),
         readSig:         make(chan struct{}),
         timeoutOccurred: false,
         readTimeout:     readTimeout,
         readTimeoutSig:  make(chan struct{}),
 
-        write:           func(sppp.Message) error { return nil },
+        write:           func(Message) error { return nil },
     }
 
     s.acceptReadSignals()
@@ -38,14 +37,14 @@ func NewStream(msgID int64, readTimeout time.Duration) *Stream {
 type Stream struct {
     msgID      int64
 
-    readChunks chan sppp.Message
+    readChunks chan Message
     readErrs   chan error
     readSig    chan struct{}
     readTimeoutSig    chan struct{}
     timeoutOccurred bool
     readTimeout time.Duration
 
-    write func(sppp.Message) error
+    write func(Message) error
 }
 
 func (s *Stream) ReadData() ([]byte, error) {
@@ -109,13 +108,13 @@ func (s *Stream) acceptReadSignals() {
     }()
 }
 
-func (s *Stream) feed(msg sppp.Message) {
+func (s *Stream) feed(msg Message) {
     s.readChunks <- msg
     s.readSig <- struct{}{}
 }
 
 func (s *Stream) writeClose() error {
-    msg := sppp.NewMessage(s.msgID, sppp.EndType, nil)
+    msg := NewMessage(s.msgID, EndType, nil)
     return s.write(msg)
 }
 
@@ -125,7 +124,7 @@ func (s *Stream) WriteData(b []byte) error {
 }
 
 func (s *Stream) Write(b []byte) (int, error) {
-    msgs := sppp.SplitIntoMessages(s.msgID, sppp.StreamType, b)
+    msgs := SplitIntoMessages(s.msgID, StreamType, b)
 
     for _, m := range msgs {
         err := s.write(m)

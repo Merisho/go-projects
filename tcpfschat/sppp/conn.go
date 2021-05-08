@@ -1,8 +1,7 @@
-package conn
+package sppp
 
 import (
     "errors"
-    "github.com/merisho/tcp-fs-chat/sppp"
     "log"
     "math/rand"
     "net"
@@ -17,7 +16,7 @@ var (
 func NewConn(c net.Conn) *Conn {
     conn := &Conn{
         Conn:           c,
-        textMsgChan:    make(chan sppp.Message, 1024),
+        textMsgChan:    make(chan Message, 1024),
         newStreamsChan: make(chan *Stream, 128),
         streams:        make(map[int64]*Stream),
         msgReadTimeout: 5 * time.Second,
@@ -34,7 +33,7 @@ func NewConn(c net.Conn) *Conn {
 type Conn struct {
     net.Conn
 
-    textMsgChan   chan sppp.Message
+    textMsgChan   chan Message
     msgReadTimeout time.Duration
     txtBuffer *TextMessageBuffer
 
@@ -45,7 +44,7 @@ type Conn struct {
     rand           *rand.Rand
 }
 
-func (c *Conn) ReadMsg() (sppp.Message, error) {
+func (c *Conn) ReadMsg() (Message, error) {
     return <- c.textMsgChan, nil
 }
 
@@ -70,19 +69,19 @@ func (c *Conn) startReading() {
                 panic(err)
             }
 
-            msg, err := sppp.UnmarshalMessage(b)
+            msg, err := UnmarshalMessage(b)
             if err != nil {
-                badMsg := sppp.NewMessage(0, sppp.ErrorType, nil).Marshal()
+                badMsg := NewMessage(0, ErrorType, nil).Marshal()
                 _, _ = c.Conn.Write(badMsg[:])
                 continue
             }
 
             switch msg.Type {
-            case sppp.TextType:
+            case TextType:
                 c.handleTextMessage(msg)
-            case sppp.StreamType:
+            case StreamType:
                 c.handleStreamMessage(msg)
-            case sppp.EndType:
+            case EndType:
                 c.handleMessageEnd(msg)
             }
         }
@@ -98,11 +97,11 @@ func (c *Conn) startTimeoutsHandling() {
     }()
 }
 
-func (c *Conn) handleTextMessage(msg sppp.Message) {
+func (c *Conn) handleTextMessage(msg Message) {
     c.txtBuffer.Message(msg, c.msgReadTimeout)
 }
 
-func (c *Conn) handleStreamMessage(msg sppp.Message) {
+func (c *Conn) handleStreamMessage(msg Message) {
     c.streamsMutex.Lock()
     defer c.streamsMutex.Unlock()
 
@@ -120,7 +119,7 @@ func (c *Conn) handleStreamMessage(msg sppp.Message) {
     }
 }
 
-func (c *Conn) handleMessageEnd(msg sppp.Message) {
+func (c *Conn) handleMessageEnd(msg Message) {
     m := c.txtBuffer.EndMessage(msg)
     if !m.Empty() {
         c.textMsgChan <- m
@@ -158,7 +157,7 @@ func (c *Conn) removeStream(msgID int64) {
 }
 
 func (c *Conn) writeTimeout(id int64) {
-    timeoutMsg := sppp.NewMessage(id, sppp.TimeoutType, nil)
+    timeoutMsg := NewMessage(id, TimeoutType, nil)
     rawTimeoutMsg := timeoutMsg.Marshal()
 
     _, _ = c.Conn.Write(rawTimeoutMsg[:])
@@ -166,8 +165,8 @@ func (c *Conn) writeTimeout(id int64) {
 
 func (c *Conn) WriteMsg(rawMsg []byte) error {
     id := c.rand.Int63()
-    msgs := sppp.SplitIntoMessages(id, sppp.TextType, rawMsg)
-    msgs = append(msgs, sppp.NewMessage(id, sppp.EndType, nil))
+    msgs := SplitIntoMessages(id, TextType, rawMsg)
+    msgs = append(msgs, NewMessage(id, EndType, nil))
 
     for _, m := range msgs {
         rawMsg := m.Marshal()
@@ -184,7 +183,7 @@ func (c *Conn) WriteStream(meta []byte) (WriteStream, error) {
     id := c.rand.Int63()
 
     s := NewStream(id, c.streamReadTimeout)
-    s.write = func(message sppp.Message) error {
+    s.write = func(message Message) error {
         raw := message.Marshal()
         _, err := c.Write(raw[:])
         return err

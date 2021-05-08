@@ -1,7 +1,7 @@
 package connections
 
 import (
-	"bytes"
+    "bytes"
 	"github.com/google/uuid"
 	"github.com/merisho/tcp-fs-chat/internal/chaterrors"
 	"net"
