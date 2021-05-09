@@ -1,13 +1,16 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"github.com/merisho/tcp-fs-chat/sppp"
 	"io"
 	"log"
 	"net"
 	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 func main() {
@@ -34,57 +37,76 @@ func main() {
 
 	c := sppp.NewConn(d)
 
+	go func() {
+		for {
+			msg, err := c.ReadMsg()
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			fmt.Println(string(msg.Content))
+		}
+	}()
 
 	go func() {
 		for {
 			s := c.ReadStream()
-
-			meta, err := s.ReadData()
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			fileName := string(meta)
-			fmt.Println("Client accepting:", fileName)
-
-			f, err := os.OpenFile(fileName, os.O_CREATE, 0777)
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			b, err := s.ReadData()
-			for err == nil {
-				_, err = f.Write(b)
-				if err != nil {
-					log.Fatal(err)
-				}
-
-				b, err = s.ReadData()
-			}
-
-			if err != io.EOF {
-				log.Fatal(err)
-			}
+			go handleStream(s)
 		}
 	}()
 
-	s, err := c.WriteStream([]byte("file.mp4"))
+	r := bufio.NewReader(os.Stdin)
+	for {
+		b, _, err := r.ReadLine()
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		if string(b[:2]) == "/f" {
+			go sendFile(c, string(b[2:]))
+		} else {
+			err = c.WriteMsg(b)
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+	}
+}
+
+func sendFile(c *sppp.Conn, filePath string) {
+	filePath = strings.TrimSpace(filePath)
+
+	fileName := filepath.Base(filePath)
+	fmt.Println("Sending file", fileName)
+
+	ws, err := c.WriteStream([]byte(fileName))
+	if err != nil {
+		log.Fatalf("Could not send file: %s", err)
+	}
+	defer func() {
+		err := ws.Close()
+		if err != nil {
+			log.Fatalf("Could not send write stream: %s", err)
+		}
+	}()
+
+	f, err := os.Open(filePath)
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer func() {
+		err := f.Close()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}()
 
-	f, err := os.Open("d:\\Memories\\Feeling Good by Me.mp4")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	b := make([]byte, 2048)
-
+	b := make([]byte, 8192)
 	n, err := f.Read(b)
 	for err == nil {
-		err = s.WriteData(b[:n])
+		err = ws.WriteData(b[:n])
 		if err != nil {
-			break
+			log.Fatal(err)
 		}
 
 		n, err = f.Read(b)
@@ -93,22 +115,41 @@ func main() {
 	if err != io.EOF {
 		log.Fatal(err)
 	}
+}
 
-	err = s.Close()
+func handleStream(s sppp.ReadStream) {
+	meta, err := s.ReadData()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	//r := bufio.NewReader(os.Stdin)
-	//for {
-	//	b, _, err := r.ReadLine()
-	//	if err != nil {
-	//		log.Fatal(err)
-	//	}
-	//
-	//	err = c.WriteMsg(b)
-	//	if err != nil {
-	//		log.Fatal(err)
-	//	}
-	//}
+	fileName := string(meta)
+	fmt.Println("Client accepting:", fileName)
+
+	f, err := os.OpenFile(fileName, os.O_CREATE, 0777)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer func() {
+		err := f.Close()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}()
+
+	b, err := s.ReadData()
+	for err == nil {
+		_, err = f.Write(b)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		b, err = s.ReadData()
+	}
+
+	if err != io.EOF {
+		log.Fatal(err)
+	}
+
+	fmt.Println("Download finished:", fileName)
 }

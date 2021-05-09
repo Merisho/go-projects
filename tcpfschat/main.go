@@ -1,13 +1,12 @@
 package main
 
 import (
-    "bytes"
     "fmt"
+    "os"
+    "path/filepath"
 )
 
 func main() {
-    b := []byte{1,1,0,1,1,0}
-    bs := bytes.Split(b, []byte{0})
-
-    fmt.Println(len(bs), bs)
+    str := os.Args[1]
+    fmt.Println(filepath.Base(str))
 }
