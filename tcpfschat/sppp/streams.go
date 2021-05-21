@@ -1,7 +1,6 @@
 package sppp
 
 import (
-    "fmt"
     "io"
     "time"
 )
@@ -102,7 +101,6 @@ func (s *Stream) acceptReadSignals() {
                 s.readTimeoutSig <- struct{}{}
                 return
             case <- s.readSig:
-                fmt.Println("READ SIG")
             }
         }
     }()

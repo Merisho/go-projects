@@ -2,6 +2,7 @@ package sppp
 
 import (
     "errors"
+    "github.com/merisho/tcp-fs-chat/internal/csdt"
     "log"
     "math/rand"
     "net"
@@ -17,11 +18,13 @@ func NewConn(c net.Conn) *Conn {
     conn := &Conn{
         Conn:           c,
         textMsgChan:    make(chan Message, 1024),
+        mainErrChan:    make(chan error),
         newStreamsChan: make(chan *Stream, 128),
         streams:        make(map[int64]*Stream),
         msgReadTimeout: 5 * time.Second,
         txtBuffer:      NewTextMessageBuffer(),
         rand:           rand.New(rand.NewSource(time.Now().Unix())),
+        finishErr:      csdt.NewValue(),
     }
 
     conn.startReading()
@@ -33,7 +36,7 @@ func NewConn(c net.Conn) *Conn {
 type Conn struct {
     net.Conn
 
-    textMsgChan   chan Message
+    textMsgChan    chan Message
     msgReadTimeout time.Duration
     txtBuffer *TextMessageBuffer
 
@@ -42,18 +45,41 @@ type Conn struct {
     newStreamsChan chan *Stream
     streams        map[int64]*Stream
     rand           *rand.Rand
+
+    mainErrChan chan error
+    finishErr   *csdt.Value
 }
 
 func (c *Conn) ReadMsg() (Message, error) {
-    return <- c.textMsgChan, nil
+    finishErr := c.finishErr.Value()
+    if finishErr != nil {
+        return Message{}, finishErr.(error)
+    }
+
+    select {
+    case m := <- c.textMsgChan:
+        return m, nil
+    case <- c.mainErrChan:
+        return Message{}, c.finishErr.Value().(error)
+    }
 }
 
 func (c *Conn) MsgCount() int {
     return len(c.textMsgChan)
 }
 
-func (c *Conn) ReadStream() ReadStream {
-    return <- c.newStreamsChan
+func (c *Conn) ReadStream() (ReadStream, error) {
+    finishErr := c.finishErr.Value()
+    if finishErr != nil {
+        return nil, finishErr.(error)
+    }
+
+    select {
+    case s := <- c.newStreamsChan:
+        return s, nil
+    case <- c.mainErrChan:
+        return nil, c.finishErr.Value().(error)
+    }
 }
 
 func (c *Conn) SetMessageReadTimeout(d time.Duration) {
@@ -70,7 +96,10 @@ func (c *Conn) startReading() {
         for {
             _, err := c.Conn.Read(b[:])
             if err != nil {
-                panic(err)
+                c.finishErr.SetValue(err)
+                close(c.mainErrChan)
+                go c.closeAllStreams()
+                return
             }
 
             msg, err := UnmarshalMessage(b)
@@ -199,4 +228,15 @@ func (c *Conn) WriteStream(meta []byte) (WriteStream, error) {
     }
 
     return s, nil
+}
+
+func (c *Conn) closeAllStreams() {
+    c.streamsMutex.Lock()
+    defer c.streamsMutex.Unlock()
+
+    for _, s := range c.streams {
+        _ = s.Close()
+    }
+
+    c.streams = nil
 }

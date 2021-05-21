@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 func main() {
@@ -19,16 +20,7 @@ func main() {
 	}
 
 	host := os.Args[1]
-
-	port := uint16(1337)
-	if len(os.Args) >= 3 {
-		p, err := strconv.ParseUint(os.Args[2], 10, 16)
-		if err != nil {
-			log.Fatal("port is not a number")
-		}
-
-		port = uint16(p)
-	}
+	port := getPort()
 
 	d, err := net.Dial("tcp", fmt.Sprintf("%s:%d", host, port))
 	if err != nil {
@@ -41,20 +33,40 @@ func main() {
 		for {
 			msg, err := c.ReadMsg()
 			if err != nil {
+				if err == io.EOF {
+					log.Println("Connection closed")
+					os.Exit(0)
+				}
+
 				log.Fatal(err)
 			}
 
-			fmt.Println(string(msg.Content))
+			now := time.Now().Format(time.RFC822Z)
+			fmt.Println(now, string(msg.Content))
 		}
 	}()
 
 	go func() {
 		for {
-			s := c.ReadStream()
+			s, err := c.ReadStream()
+			if err != nil {
+				if err == io.EOF {
+					log.Println("Connection closed")
+					os.Exit(0)
+				}
+
+				log.Fatal(err)
+			}
+
 			go handleStream(s)
 		}
 	}()
 
+	fmt.Println("Your nickname:")
+	processOutgoingMessages(c)
+}
+
+func processOutgoingMessages(c *sppp.Conn) {
 	r := bufio.NewReader(os.Stdin)
 	for {
 		b, _, err := r.ReadLine()
@@ -79,17 +91,6 @@ func sendFile(c *sppp.Conn, filePath string) {
 	fileName := filepath.Base(filePath)
 	fmt.Println("Sending file", fileName)
 
-	ws, err := c.WriteStream([]byte(fileName))
-	if err != nil {
-		log.Fatalf("Could not send file: %s", err)
-	}
-	defer func() {
-		err := ws.Close()
-		if err != nil {
-			log.Fatalf("Could not send write stream: %s", err)
-		}
-	}()
-
 	f, err := os.Open(filePath)
 	if err != nil {
 		log.Fatal(err)
@@ -98,6 +99,17 @@ func sendFile(c *sppp.Conn, filePath string) {
 		err := f.Close()
 		if err != nil {
 			log.Fatal(err)
+		}
+	}()
+
+	ws, err := c.WriteStream([]byte(fileName))
+	if err != nil {
+		log.Fatalf("Could not send file: %s", err)
+	}
+	defer func() {
+		err := ws.Close()
+		if err != nil {
+			log.Fatalf("Could not send write stream: %s", err)
 		}
 	}()
 
@@ -152,4 +164,18 @@ func handleStream(s sppp.ReadStream) {
 	}
 
 	fmt.Println("Download finished:", fileName)
+}
+
+func getPort() uint16 {
+	port := uint16(1337)
+	if len(os.Args) >= 3 {
+		p, err := strconv.ParseUint(os.Args[2], 10, 16)
+		if err != nil {
+			log.Fatal("port is not a number")
+		}
+
+		port = uint16(p)
+	}
+
+	return port
 }

@@ -71,7 +71,9 @@ func (s *E2ESPPPTestSuite) TestStreams() {
     srvConn, err := srv.Accept()
     s.Require().NoError(err)
 
-    rs := srvConn.ReadStream()
+    rs, err := srvConn.ReadStream()
+    s.Require().NoError(err)
+
     meta, err := rs.ReadData()
     s.Require().NoError(err)
     s.Require().Equal("stream meta", string(meta))

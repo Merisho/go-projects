@@ -4,6 +4,7 @@ import (
     "github.com/merisho/tcp-fs-chat/sppp"
     "io"
     "log"
+    "net"
     "sync"
 )
 
@@ -49,6 +50,10 @@ func (srv *Server) handleConnection(cn *sppp.Conn) {
 
         metaMsg, err := cn.ReadMsg()
         if err != nil {
+            if err == io.EOF {
+                return
+            }
+
             log.Println(err)
             return
         }
@@ -57,23 +62,28 @@ func (srv *Server) handleConnection(cn *sppp.Conn) {
 
         for {
            msg, err := cn.ReadMsg()
-           if err != nil {
-               if err == io.EOF {
-                   return
-               }
+            if err != nil {
+                if e, ok := err.(net.Error); ok && (e.Temporary() || e.Timeout()) {
+                    log.Println(err)
+                    continue
+                }
 
-               log.Println(err)
-               continue
-           }
+                if err == io.EOF {
+                    return
+                }
 
+                log.Println(err)
+            }
+
+           m := append(username, ": "...)
+           m = append(m, msg.Content...)
            srv.connsMx.Lock()
            for _, c := range srv.conns {
                if c == cn {
                    continue
                }
 
-               m := append(username, ": "...)
-               err := c.WriteMsg(append(m, msg.Content...))
+               err := c.WriteMsg(m)
                if err != nil {
                    log.Println(err)
                }
@@ -87,7 +97,20 @@ func (srv *Server) handleConnection(cn *sppp.Conn) {
         defer wg.Done()
 
         for {
-            rs := cn.ReadStream()
+            rs, err := cn.ReadStream()
+            if err != nil {
+                if e, ok := err.(net.Error); ok && (e.Temporary() || e.Timeout()) {
+                    log.Println(err)
+                    continue
+                }
+
+                if err == io.EOF {
+                    return
+                }
+
+                log.Println(err)
+            }
+
             go srv.handleStream(rs, cn)
         }
     }()

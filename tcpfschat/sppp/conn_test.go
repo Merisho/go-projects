@@ -90,7 +90,8 @@ func (s *ConnTestSuite) TestReadStream() {
     rawMsg = NewMessage(id, StreamType, streamData).Marshal()
     _, _  = c1.Write(rawMsg[:])
 
-    stream := reader.ReadStream()
+    stream, err := reader.ReadStream()
+    s.Require().NoError(err)
 
     meta, err := stream.ReadData()
     s.Require().NoError(err)
@@ -123,8 +124,10 @@ func (s *ConnTestSuite) TestReadStreamTimeout() {
        rawMsg := NewMessage(id, StreamType, streamMeta).Marshal()
        _, _  = c1.Write(rawMsg[:])
 
-       stream := reader.ReadStream()
-       _, err := stream.ReadData()
+       stream, err := reader.ReadStream()
+       s.Require().NoError(err)
+
+       _, err = stream.ReadData()
         s.Require().NoError(err)
 
        _, err = stream.ReadData()
@@ -201,7 +204,7 @@ func (s *ConnTestSuite) TestWriteStream() {
    err = ws.Close()
    s.Require().NoError(err)
 
-   rs := reader.ReadStream()
+   rs, err := reader.ReadStream()
    s.Require().NoError(err)
 
    chunk, err := rs.ReadData()
@@ -219,4 +222,54 @@ func (s *ConnTestSuite) TestWriteStream() {
    chunk, err = rs.ReadData()
    s.Require().Equal(io.EOF, err)
    s.Require().Nil(chunk)
+}
+
+func (s *ConnTestSuite) TestConnectionClosing() {
+    c1, c2 := net.Pipe()
+    writer := NewConn(c1)
+    reader := NewConn(c2)
+
+    reader.Close()
+
+    _, err := writer.ReadMsg()
+    s.Equal(io.EOF, err)
+
+    _, err = writer.ReadStream()
+    s.Equal(io.EOF, err)
+}
+
+func (s *ConnTestSuite) TestStreamsClosing_ReaderCloses() {
+    c1, c2 := net.Pipe()
+    writer := NewConn(c1)
+    reader := NewConn(c2)
+
+    ws, err := writer.WriteStream([]byte("test"))
+    s.Require().NoError(err)
+
+    reader.Close()
+
+    err = ws.WriteData([]byte("test"))
+    s.Require().Equal(io.ErrClosedPipe, err)
+}
+
+func (s *ConnTestSuite) TestStreamsClosing_WriterCloses() {
+    c1, c2 := net.Pipe()
+    writer := NewConn(c1)
+    reader := NewConn(c2)
+
+    _, err := writer.WriteStream([]byte("test"))
+    s.Require().NoError(err)
+
+    writer.Close()
+
+    rs, err := reader.ReadStream()
+    s.Require().NoError(err)
+    s.Require().NotNil(rs)
+
+    // First chunk (which is stream meta) should be OK
+    _, err = rs.ReadData()
+    s.Require().NoError(err)
+
+    _, err = rs.ReadData()
+    s.Require().Equal(io.EOF, err)
 }
