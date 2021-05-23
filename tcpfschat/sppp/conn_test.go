@@ -27,7 +27,7 @@ func (s *ConnTestSuite) TestMsgRead() {
     c1, c2 := net.Pipe()
     reader := NewConn(c2)
 
-    id := s.rand.Int63()
+    id := s.rand.Uint64()
 
     rawMsg := NewMessage(id, TextType, []byte("test")).Marshal()
     _, _ = c1.Write(rawMsg[:])
@@ -48,7 +48,7 @@ func (s *ConnTestSuite) TestMsgReadTimeout() {
     reader := NewConn(c2)
     reader.SetMessageReadTimeout(50 * time.Millisecond)
 
-    id := s.rand.Int63()
+    id := s.rand.Uint64()
     rawMsg := NewMessage(id, TextType, []byte("test")).Marshal()
     _, _ = c1.Write(rawMsg[:])
 
@@ -77,7 +77,7 @@ func (s *ConnTestSuite) TestReadStream() {
     c1, c2 := net.Pipe()
     reader := NewConn(c2)
 
-    id := s.rand.Int63()
+    id := s.rand.Uint64()
     streamMeta := []byte("stream meta info")
     rawMsg := NewMessage(id, StreamType, streamMeta).Marshal()
     _, _  = c1.Write(rawMsg[:])
@@ -119,7 +119,7 @@ func (s *ConnTestSuite) TestReadStreamTimeout() {
    reader.SetStreamReadTimeout(50 * time.Millisecond)
 
    test := func() {
-       id := s.rand.Int63()
+       id := s.rand.Uint64()
        streamMeta := []byte("stream meta info")
        rawMsg := NewMessage(id, StreamType, streamMeta).Marshal()
        _, _  = c1.Write(rawMsg[:])

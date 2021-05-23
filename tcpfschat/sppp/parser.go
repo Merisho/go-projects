@@ -20,10 +20,10 @@ var (
     badMsgError = errors.New("bad message")
 )
 
-func NewMessage(id int64, t MessageType, content []byte) Message {
+func NewMessage(id uint64, t MessageType, content []byte) Message {
     return Message{
         Type:    t,
-        Size:    int64(len(content)),
+        Size:    uint64(len(content)),
         ID:      id,
         Content: content,
     }
@@ -31,8 +31,8 @@ func NewMessage(id int64, t MessageType, content []byte) Message {
 
 type Message struct {
     Type MessageType
-    Size int64
-    ID int64
+    Size uint64
+    ID uint64
     Content []byte
 }
 
@@ -46,7 +46,7 @@ func UnmarshalMessage(msg [1024]byte) (m Message, err error) {
     var rawMsgID [8]byte
     copy(rawMsgID[:], header[9:headerSize])
 
-    size := BytesToInt64(rawSize)
+    size := BytesToUint64(rawSize)
 
     if invalidMessage(msgType, size) {
         return Message{}, badMsgError
@@ -55,14 +55,14 @@ func UnmarshalMessage(msg [1024]byte) (m Message, err error) {
     m = Message{
         Type:    MessageType(header[0]),
         Size:    size,
-        ID:      BytesToInt64(rawMsgID),
+        ID:      BytesToUint64(rawMsgID),
         Content: msg[headerSize:headerSize + size],
     }
 
     return m, err
 }
 
-func invalidMessage(msgType byte, size int64) bool {
+func invalidMessage(msgType byte, size uint64) bool {
     return size > totalMsgSize - headerSize || msgType >= maxMessageTypeIota
 }
 
@@ -70,10 +70,10 @@ func (m Message) Marshal() [1024]byte {
     var b [1024]byte
     b[0] = byte(m.Type)
 
-    size := Int64ToBytes(m.Size)
+    size := Uint64ToBytes(m.Size)
     copy(b[1:], size[:])
 
-    id := Int64ToBytes(m.ID)
+    id := Uint64ToBytes(m.ID)
     copy(b[9:], id[:])
     copy(b[headerSize:], m.Content)
 
@@ -84,7 +84,7 @@ func (m Message) Empty() bool {
     return m.Type == 0 && m.Size == 0 && m.ID == 0
 }
 
-func SplitIntoMessages(id int64, t MessageType, msg []byte) []Message {
+func SplitIntoMessages(id uint64, t MessageType, msg []byte) []Message {
     var msgs []Message
 
     ln := len(msg)
@@ -96,7 +96,7 @@ func SplitIntoMessages(id int64, t MessageType, msg []byte) []Message {
 
         m := Message{
             Type:    t,
-            Size:    int64(len(msg[i:end])),
+            Size:    uint64(len(msg[i:end])),
             ID:      id,
             Content: msg[i:end],
         }

@@ -20,7 +20,7 @@ func NewConn(c net.Conn) *Conn {
         textMsgChan:        make(chan Message, 1024),
         mainErrChan:        make(chan error),
         newReadStreamsChan: make(chan *readStream, 128),
-        readStreams:        make(map[int64]*readStream),
+        readStreams:        make(map[uint64]*readStream),
         msgReadTimeout:     5 * time.Second,
         txtBuffer:          NewTextMessageBuffer(),
         rand:               rand.New(rand.NewSource(time.Now().Unix())),
@@ -43,7 +43,7 @@ type Conn struct {
     streamReadTimeout time.Duration
     streamsMutex       sync.Mutex
     newReadStreamsChan chan *readStream
-    readStreams        map[int64]*readStream
+    readStreams        map[uint64]*readStream
     rand               *rand.Rand
 
     mainErrChan chan error
@@ -174,7 +174,7 @@ func (c *Conn) deleteReadStreamAfterTimeout(s *readStream) {
     }()
 }
 
-func (c *Conn) removeReadStream(msgID int64) {
+func (c *Conn) removeReadStream(msgID uint64) {
     c.streamsMutex.Lock()
     defer c.streamsMutex.Unlock()
 
@@ -189,7 +189,7 @@ func (c *Conn) removeReadStream(msgID int64) {
     }
 }
 
-func (c *Conn) writeTimeout(id int64) {
+func (c *Conn) writeTimeout(id uint64) {
     timeoutMsg := NewMessage(id, TimeoutType, nil)
     rawTimeoutMsg := timeoutMsg.Marshal()
 
@@ -197,7 +197,7 @@ func (c *Conn) writeTimeout(id int64) {
 }
 
 func (c *Conn) WriteMsg(rawMsg []byte) error {
-    id := c.rand.Int63()
+    id := c.rand.Uint64()
     msgs := SplitIntoMessages(id, TextType, rawMsg)
     msgs = append(msgs, NewMessage(id, EndType, nil))
 
@@ -213,7 +213,7 @@ func (c *Conn) WriteMsg(rawMsg []byte) error {
 }
 
 func (c *Conn) WriteStream(meta []byte) (WriteStream, error) {
-    id := c.rand.Int63()
+    id := c.rand.Uint64()
 
     s := newWriteStream(id, c)
 

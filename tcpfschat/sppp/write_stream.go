@@ -9,7 +9,7 @@ type WriteStream interface {
     WriteData([]byte) error
 }
 
-func newWriteStream(msgID int64, w io.Writer) *writeStream {
+func newWriteStream(msgID uint64, w io.Writer) *writeStream {
     s := &writeStream{
         msgID: msgID,
         out:   w,
@@ -19,7 +19,7 @@ func newWriteStream(msgID int64, w io.Writer) *writeStream {
 }
 
 type writeStream struct {
-    msgID      int64
+    msgID      uint64
     out io.Writer
 }
 

@@ -10,7 +10,7 @@ type ReadStream interface {
     ReadData() ([]byte, error)
 }
 
-func newReadStream(msgID int64, readTimeout time.Duration) *readStream {
+func newReadStream(msgID uint64, readTimeout time.Duration) *readStream {
     s := &readStream{
         msgID:           msgID,
         readChunks:      make(chan Message, 1024),
@@ -27,7 +27,7 @@ func newReadStream(msgID int64, readTimeout time.Duration) *readStream {
 }
 
 type readStream struct {
-    msgID      int64
+    msgID      uint64
     readChunks chan Message
     readErrs   chan error
     readSig    chan struct{}

@@ -14,9 +14,9 @@ type SPPPTestSuite struct {
     suite.Suite
 }
 
-func (s *SPPPTestSuite) TestInt64ToBytes() {
+func (s *SPPPTestSuite) TestUint64ToBytes() {
     cases := []struct{
-        in int64
+        in uint64
         expected [8]byte
     }{
         {
@@ -43,13 +43,17 @@ func (s *SPPPTestSuite) TestInt64ToBytes() {
             in: 512,
             expected: [8]byte{0, 2},
         },
+        {
+            in: 1<<64 - 1,
+            expected: [8]byte{255, 255, 255, 255, 255, 255, 255, 255},
+        },
     }
 
     for _, c := range cases {
-        b := Int64ToBytes(c.in)
+        b := Uint64ToBytes(c.in)
         s.Equal(c.expected, b)
 
-        n := BytesToInt64(b)
+        n := BytesToUint64(b)
         s.Equal(c.in, n)
     }
 }
@@ -57,15 +61,15 @@ func (s *SPPPTestSuite) TestInt64ToBytes() {
 func (s *SPPPTestSuite) TestUnmarshal() {
    headerSize := 17
    var rawMsg [1024]byte
-   size := int64(100)
+   size := uint64(100)
    expectedMsg := strings.Repeat("a", int(size))
 
    rawMsg[0] = TextType
 
-   rawSize := Int64ToBytes(size)
+   rawSize := Uint64ToBytes(size)
    copy(rawMsg[1:], rawSize[:])
 
-   msgID := Int64ToBytes(1)
+   msgID := Uint64ToBytes(1)
    copy(rawMsg[9:], msgID[:])
    copy(rawMsg[headerSize:], expectedMsg)
 
@@ -95,16 +99,16 @@ func (s *SPPPTestSuite) TestMarshal() {
 
     rawMsg[0] = TextType
 
-    size := Int64ToBytes(int64(actualMsgSize))
+    size := Uint64ToBytes(uint64(actualMsgSize))
     copy(rawMsg[1:], size[:])
 
-    msgID := Int64ToBytes(1)
+    msgID := Uint64ToBytes(1)
     copy(rawMsg[9:], msgID[:])
     copy(rawMsg[headerSize:], actualMsg)
 
     msg := Message{
         Type:    TextType,
-        Size:    int64(actualMsgSize),
+        Size:    uint64(actualMsgSize),
         ID:      1,
         Content: []byte(actualMsg),
     }

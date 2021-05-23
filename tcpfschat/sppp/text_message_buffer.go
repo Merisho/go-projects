@@ -7,15 +7,15 @@ import (
 
 func NewTextMessageBuffer() *TextMessageBuffer {
     return &TextMessageBuffer{
-        buffer: make(map[int64]Message),
-        timeouts: make(chan int64),
+        buffer: make(map[uint64]Message),
+        timeouts: make(chan uint64),
     }
 }
 
 type TextMessageBuffer struct {
-    buffer map[int64]Message
+    buffer map[uint64]Message
     mutex sync.Mutex
-    timeouts chan int64
+    timeouts chan uint64
 }
 
 func (b *TextMessageBuffer) Message(msg Message, timeout time.Duration) {
@@ -46,7 +46,7 @@ func (b *TextMessageBuffer) EndMessage(msg Message) Message {
     return m
 }
 
-func (b *TextMessageBuffer) Timeouts() <- chan int64 {
+func (b *TextMessageBuffer) Timeouts() <- chan uint64 {
     return b.timeouts
 }
 
@@ -60,7 +60,7 @@ func (b *TextMessageBuffer) deleteBufferOnTimeout(m Message, timeout time.Durati
     }()
 }
 
-func (b *TextMessageBuffer) deleteBuffer(id int64) (deleted bool) {
+func (b *TextMessageBuffer) deleteBuffer(id uint64) (deleted bool) {
     b.mutex.Lock()
     defer b.mutex.Unlock()
 
