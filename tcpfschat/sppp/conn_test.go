@@ -278,7 +278,6 @@ func (s *ConnTestSuite) TestStreamReadAll_BufferOverflow() {
     rs, err := reader.ReadStream()
     s.Require().NoError(err)
 
-    // Write stream above never closes, so timeout must be reached
     msg, err := rs.ReadAll(50 * time.Millisecond, 1000)
     s.Require().Equal(BufferOverflowError, err)
     s.Require().Nil(msg)
