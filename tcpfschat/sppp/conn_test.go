@@ -167,9 +167,7 @@ func (s *ConnTestSuite) TestHandleInvalidMessage() {
 }
 
 func (s *ConnTestSuite) TestWriteMessage() {
-    c1, c2 := net.Pipe()
-    writer := NewConn(c1)
-    reader := NewConn(c2)
+    writer, reader := pipe()
 
     rawMsg := bytes.Repeat([]byte("test"), 1024)
     err := writer.WriteMsg(rawMsg)
@@ -181,44 +179,40 @@ func (s *ConnTestSuite) TestWriteMessage() {
 }
 
 func (s *ConnTestSuite) TestWriteStream() {
-   c1, c2 := net.Pipe()
-   writer := NewConn(c1)
-   reader := NewConn(c2)
+    writer, reader := pipe()
 
-   metaInfo := []byte("stream meta info")
-   ws, err := writer.WriteStream(metaInfo)
-   s.Require().NoError(err)
+    metaInfo := []byte("stream meta info")
+    ws, err := writer.WriteStream(metaInfo)
+    s.Require().NoError(err)
 
-   err = ws.WriteData([]byte("chunk 1"))
-   s.Require().NoError(err)
+    err = ws.WriteData([]byte("chunk 1"))
+    s.Require().NoError(err)
 
-   err = ws.WriteData([]byte("chunk 2"))
-   s.Require().NoError(err)
+    err = ws.WriteData([]byte("chunk 2"))
+    s.Require().NoError(err)
 
-   err = ws.Close()
-   s.Require().NoError(err)
+    err = ws.Close()
+    s.Require().NoError(err)
 
-   rs, err := reader.ReadStream()
-   s.Require().NoError(err)
-   s.Require().Equal("stream meta info", string(rs.Meta()))
+    rs, err := reader.ReadStream()
+    s.Require().NoError(err)
+    s.Require().Equal("stream meta info", string(rs.Meta()))
 
-   chunk, err := rs.ReadData()
-   s.Require().NoError(err)
-   s.Require().Equal("chunk 1", string(chunk))
+    chunk, err := rs.ReadData()
+    s.Require().NoError(err)
+    s.Require().Equal("chunk 1", string(chunk))
 
-   chunk, err = rs.ReadData()
-   s.Require().NoError(err)
-   s.Require().Equal("chunk 2", string(chunk))
+    chunk, err = rs.ReadData()
+    s.Require().NoError(err)
+    s.Require().Equal("chunk 2", string(chunk))
 
-   chunk, err = rs.ReadData()
-   s.Require().Equal(io.EOF, err)
-   s.Require().Nil(chunk)
+    chunk, err = rs.ReadData()
+    s.Require().Equal(io.EOF, err)
+    s.Require().Nil(chunk)
 }
 
 func (s *ConnTestSuite) TestConnectionClosing() {
-    c1, c2 := net.Pipe()
-    writer := NewConn(c1)
-    reader := NewConn(c2)
+    writer, reader := pipe()
 
     reader.Close()
 
@@ -230,9 +224,7 @@ func (s *ConnTestSuite) TestConnectionClosing() {
 }
 
 func (s *ConnTestSuite) TestStreamsClosing_ReaderCloses() {
-    c1, c2 := net.Pipe()
-    writer := NewConn(c1)
-    reader := NewConn(c2)
+    writer, reader := pipe()
 
     ws, err := writer.WriteStream([]byte("test"))
     s.Require().NoError(err)
@@ -244,9 +236,7 @@ func (s *ConnTestSuite) TestStreamsClosing_ReaderCloses() {
 }
 
 func (s *ConnTestSuite) TestStreamsClosing_WriterCloses() {
-    c1, c2 := net.Pipe()
-    writer := NewConn(c1)
-    reader := NewConn(c2)
+    writer, reader := pipe()
 
     _, err := writer.WriteStream([]byte("test"))
     s.Require().NoError(err)
@@ -262,9 +252,7 @@ func (s *ConnTestSuite) TestStreamsClosing_WriterCloses() {
 }
 
 func (s *ConnTestSuite) TestStreamReadAll() {
-    c1, c2 := net.Pipe()
-    writer := NewConn(c1)
-    reader := NewConn(c2)
+    writer, reader := pipe()
 
     ws, err := writer.WriteStream([]byte("test"))
     s.Require().NoError(err)
@@ -289,9 +277,7 @@ func (s *ConnTestSuite) TestStreamReadAll() {
 }
 
 func (s *ConnTestSuite) TestStreamReadAll_Timeout() {
-    c1, c2 := net.Pipe()
-    writer := NewConn(c1)
-    reader := NewConn(c2)
+    writer, reader := pipe()
 
     ws, err := writer.WriteStream([]byte("test"))
     s.Require().NoError(err)
@@ -309,9 +295,7 @@ func (s *ConnTestSuite) TestStreamReadAll_Timeout() {
 }
 
 func (s *ConnTestSuite) TestStreamReadAll_BufferOverflow() {
-    c1, c2 := net.Pipe()
-    writer := NewConn(c1)
-    reader := NewConn(c2)
+    writer, reader := pipe()
 
     ws, err := writer.WriteStream([]byte("test"))
     s.Require().NoError(err)
@@ -328,4 +312,9 @@ func (s *ConnTestSuite) TestStreamReadAll_BufferOverflow() {
     msg, err := rs.ReadAll(50 * time.Millisecond, 1000)
     s.Require().Equal(BufferOverflowError, err)
     s.Require().Nil(msg)
+}
+
+func pipe() (*Conn, *Conn) {
+    c1, c2 := net.Pipe()
+    return NewConn(c1), NewConn(c2)
 }
