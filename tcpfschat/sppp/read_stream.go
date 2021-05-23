@@ -10,13 +10,8 @@ type ReadStream interface {
     ReadData() ([]byte, error)
 }
 
-type WriteStream interface {
-    io.WriteCloser
-    WriteData([]byte) error
-}
-
-func NewStream(msgID int64, readTimeout time.Duration) *Stream {
-    s := &Stream{
+func newReadStream(msgID int64, readTimeout time.Duration) *readStream {
+    s := &readStream{
         msgID:           msgID,
         readChunks:      make(chan Message, 1024),
         readErrs:        make(chan error),
@@ -24,8 +19,6 @@ func NewStream(msgID int64, readTimeout time.Duration) *Stream {
         timeoutOccurred: false,
         readTimeout:     readTimeout,
         readTimeoutSig:  make(chan struct{}),
-
-        write:           func(Message) error { return nil },
     }
 
     s.acceptReadSignals()
@@ -33,20 +26,17 @@ func NewStream(msgID int64, readTimeout time.Duration) *Stream {
     return s
 }
 
-type Stream struct {
+type readStream struct {
     msgID      int64
-
     readChunks chan Message
     readErrs   chan error
     readSig    chan struct{}
     readTimeoutSig    chan struct{}
     timeoutOccurred bool
     readTimeout time.Duration
-
-    write func(Message) error
 }
 
-func (s *Stream) ReadData() ([]byte, error) {
+func (s *readStream) ReadData() ([]byte, error) {
     b := make([]byte, 2048)
     n, err := s.Read(b)
     if err != nil {
@@ -56,7 +46,7 @@ func (s *Stream) ReadData() ([]byte, error) {
     return b[:n], nil
 }
 
-func (s *Stream) Read(b []byte) (int, error) {
+func (s *readStream) Read(b []byte) (int, error) {
     select {
     case m, ok := <- s.readChunks:
         if !ok {
@@ -75,19 +65,19 @@ func (s *Stream) Read(b []byte) (int, error) {
     }
 }
 
-func (s *Stream) ReadTimeoutWait() chan struct{} {
+func (s *readStream) ReadTimeoutWait() chan struct{} {
     return s.readTimeoutSig
 }
 
-func (s *Stream) Close() error {
+func (s *readStream) Close() error {
     close(s.readChunks)
     close(s.readSig)
     close(s.readTimeoutSig)
 
-    return s.writeClose()
+    return nil
 }
 
-func (s *Stream) acceptReadSignals() {
+func (s *readStream) acceptReadSignals() {
     go func() {
         if s.readTimeout == 0 {
             for range s.readSig {}
@@ -106,30 +96,7 @@ func (s *Stream) acceptReadSignals() {
     }()
 }
 
-func (s *Stream) feed(msg Message) {
+func (s *readStream) feed(msg Message) {
     s.readChunks <- msg
     s.readSig <- struct{}{}
-}
-
-func (s *Stream) writeClose() error {
-    msg := NewMessage(s.msgID, EndType, nil)
-    return s.write(msg)
-}
-
-func (s *Stream) WriteData(b []byte) error {
-    _, err := s.Write(b)
-    return err
-}
-
-func (s *Stream) Write(b []byte) (int, error) {
-    msgs := SplitIntoMessages(s.msgID, StreamType, b)
-
-    for _, m := range msgs {
-        err := s.write(m)
-        if err != nil {
-            return 0, err
-        }
-    }
-
-    return len(b), nil
 }

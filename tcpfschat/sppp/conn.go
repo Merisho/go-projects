@@ -16,15 +16,15 @@ var (
 
 func NewConn(c net.Conn) *Conn {
     conn := &Conn{
-        Conn:           c,
-        textMsgChan:    make(chan Message, 1024),
-        mainErrChan:    make(chan error),
-        newStreamsChan: make(chan *Stream, 128),
-        streams:        make(map[int64]*Stream),
-        msgReadTimeout: 5 * time.Second,
-        txtBuffer:      NewTextMessageBuffer(),
-        rand:           rand.New(rand.NewSource(time.Now().Unix())),
-        finishErr:      csdt.NewValue(),
+        Conn:               c,
+        textMsgChan:        make(chan Message, 1024),
+        mainErrChan:        make(chan error),
+        newReadStreamsChan: make(chan *readStream, 128),
+        readStreams:        make(map[int64]*readStream),
+        msgReadTimeout:     5 * time.Second,
+        txtBuffer:          NewTextMessageBuffer(),
+        rand:               rand.New(rand.NewSource(time.Now().Unix())),
+        finishErr:          csdt.NewValue(),
     }
 
     conn.startReading()
@@ -41,10 +41,10 @@ type Conn struct {
     txtBuffer *TextMessageBuffer
 
     streamReadTimeout time.Duration
-    streamsMutex   sync.Mutex
-    newStreamsChan chan *Stream
-    streams        map[int64]*Stream
-    rand           *rand.Rand
+    streamsMutex       sync.Mutex
+    newReadStreamsChan chan *readStream
+    readStreams        map[int64]*readStream
+    rand               *rand.Rand
 
     mainErrChan chan error
     finishErr   *csdt.Value
@@ -75,7 +75,7 @@ func (c *Conn) ReadStream() (ReadStream, error) {
     }
 
     select {
-    case s := <- c.newStreamsChan:
+    case s := <- c.newReadStreamsChan:
         return s, nil
     case <- c.mainErrChan:
         return nil, c.finishErr.Value().(error)
@@ -98,7 +98,7 @@ func (c *Conn) startReading() {
             if err != nil {
                 c.finishErr.SetValue(err)
                 close(c.mainErrChan)
-                go c.closeAllStreams()
+                go c.closeReadStreams()
                 return
             }
 
@@ -138,17 +138,17 @@ func (c *Conn) handleStreamMessage(msg Message) {
     c.streamsMutex.Lock()
     defer c.streamsMutex.Unlock()
 
-    s, ok := c.streams[msg.ID]
+    s, ok := c.readStreams[msg.ID]
     if ok {
         s.feed(msg)
     } else {
-        s := NewStream(msg.ID, c.streamReadTimeout)
+        s := newReadStream(msg.ID, c.streamReadTimeout)
         s.feed(msg)
 
-        c.deleteStreamAfterTimeout(s)
-        c.newStreamsChan <- s
+        c.deleteReadStreamAfterTimeout(s)
+        c.newReadStreamsChan <- s
 
-        c.streams[msg.ID] = s
+        c.readStreams[msg.ID] = s
     }
 }
 
@@ -159,10 +159,10 @@ func (c *Conn) handleMessageEnd(msg Message) {
         return
     }
 
-    c.removeStream(msg.ID)
+    c.removeReadStream(msg.ID)
 }
 
-func (c *Conn) deleteStreamAfterTimeout(s *Stream) {
+func (c *Conn) deleteReadStreamAfterTimeout(s *readStream) {
     go func() {
         _, ok := <- s.ReadTimeoutWait()
         if !ok {
@@ -170,22 +170,22 @@ func (c *Conn) deleteStreamAfterTimeout(s *Stream) {
         }
         
         c.writeTimeout(s.msgID)
-        c.removeStream(s.msgID)
+        c.removeReadStream(s.msgID)
     }()
 }
 
-func (c *Conn) removeStream(msgID int64) {
+func (c *Conn) removeReadStream(msgID int64) {
     c.streamsMutex.Lock()
     defer c.streamsMutex.Unlock()
 
-    s, ok := c.streams[msgID]
+    s, ok := c.readStreams[msgID]
     if ok {
         err := s.Close()
         if err != nil {
             log.Fatalf("Could not close stream: %s", err)
         }
 
-        delete(c.streams, msgID)
+        delete(c.readStreams, msgID)
     }
 }
 
@@ -215,12 +215,7 @@ func (c *Conn) WriteMsg(rawMsg []byte) error {
 func (c *Conn) WriteStream(meta []byte) (WriteStream, error) {
     id := c.rand.Int63()
 
-    s := NewStream(id, c.streamReadTimeout)
-    s.write = func(message Message) error {
-        raw := message.Marshal()
-        _, err := c.Write(raw[:])
-        return err
-    }
+    s := newWriteStream(id, c)
 
     err := s.WriteData(meta)
     if err != nil {
@@ -230,13 +225,13 @@ func (c *Conn) WriteStream(meta []byte) (WriteStream, error) {
     return s, nil
 }
 
-func (c *Conn) closeAllStreams() {
+func (c *Conn) closeReadStreams() {
     c.streamsMutex.Lock()
     defer c.streamsMutex.Unlock()
 
-    for _, s := range c.streams {
+    for _, s := range c.readStreams {
         _ = s.Close()
     }
 
-    c.streams = nil
+    c.readStreams = nil
 }
