@@ -92,10 +92,7 @@ func (s *ConnTestSuite) TestReadStream() {
 
     stream, err := reader.ReadStream()
     s.Require().NoError(err)
-
-    meta, err := stream.ReadData()
-    s.Require().NoError(err)
-    s.Require().Equal("stream meta info", string(meta))
+    s.Require().Equal("stream meta info", string(stream.Meta()))
 
     chunk, err := stream.ReadData()
     s.Require().NoError(err)
@@ -126,9 +123,6 @@ func (s *ConnTestSuite) TestReadStreamTimeout() {
 
        stream, err := reader.ReadStream()
        s.Require().NoError(err)
-
-       _, err = stream.ReadData()
-        s.Require().NoError(err)
 
        _, err = stream.ReadData()
        s.Require().Equal(TimeoutError, err)
@@ -206,12 +200,9 @@ func (s *ConnTestSuite) TestWriteStream() {
 
    rs, err := reader.ReadStream()
    s.Require().NoError(err)
+   s.Require().Equal("stream meta info", string(rs.Meta()))
 
    chunk, err := rs.ReadData()
-   s.Require().NoError(err)
-   s.Require().Equal("stream meta info", string(chunk))
-
-   chunk, err = rs.ReadData()
    s.Require().NoError(err)
    s.Require().Equal("chunk 1", string(chunk))
 
@@ -265,10 +256,6 @@ func (s *ConnTestSuite) TestStreamsClosing_WriterCloses() {
     rs, err := reader.ReadStream()
     s.Require().NoError(err)
     s.Require().NotNil(rs)
-
-    // First chunk (which is stream meta) should be OK
-    _, err = rs.ReadData()
-    s.Require().NoError(err)
 
     _, err = rs.ReadData()
     s.Require().Equal(io.EOF, err)

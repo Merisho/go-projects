@@ -8,9 +8,10 @@ import (
 type ReadStream interface {
     io.ReadCloser
     ReadData() ([]byte, error)
+    Meta() []byte
 }
 
-func newReadStream(msgID uint64, readTimeout time.Duration) *readStream {
+func newReadStream(msgID uint64, meta []byte, readTimeout time.Duration) *readStream {
     s := &readStream{
         msgID:           msgID,
         readChunks:      make(chan Message, 1024),
@@ -19,6 +20,7 @@ func newReadStream(msgID uint64, readTimeout time.Duration) *readStream {
         timeoutOccurred: false,
         readTimeout:     readTimeout,
         readTimeoutSig:  make(chan struct{}),
+        meta:            meta,
     }
 
     s.acceptReadSignals()
@@ -34,6 +36,7 @@ type readStream struct {
     readTimeoutSig    chan struct{}
     timeoutOccurred bool
     readTimeout time.Duration
+    meta []byte
 }
 
 func (s *readStream) ReadData() ([]byte, error) {
@@ -99,4 +102,8 @@ func (s *readStream) acceptReadSignals() {
 func (s *readStream) feed(msg Message) {
     s.readChunks <- msg
     s.readSig <- struct{}{}
+}
+
+func (s *readStream) Meta() []byte {
+    return s.meta
 }

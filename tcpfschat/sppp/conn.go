@@ -142,8 +142,7 @@ func (c *Conn) handleStreamMessage(msg Message) {
     if ok {
         s.feed(msg)
     } else {
-        s := newReadStream(msg.ID, c.streamReadTimeout)
-        s.feed(msg)
+        s := newReadStream(msg.ID, msg.Content, c.streamReadTimeout)
 
         c.deleteReadStreamAfterTimeout(s)
         c.newReadStreamsChan <- s

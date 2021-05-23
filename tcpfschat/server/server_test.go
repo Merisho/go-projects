@@ -9,6 +9,10 @@ import (
     "time"
 )
 
+const (
+    testAddress = ":1337"
+)
+
 func TestChatServer(t *testing.T) {
     suite.Run(t, new(ChatServerTestSuite))
 }
@@ -18,7 +22,7 @@ type ChatServerTestSuite struct {
 }
 
 func (s *ChatServerTestSuite) SetupSuite() {
-   ln, err := net.Listen("tcp", ":1337")
+   ln, err := net.Listen("tcp", testAddress)
    s.Require().NoError(err)
 
    sln := sppp.NewSPPPListener(ln)
@@ -28,7 +32,7 @@ func (s *ChatServerTestSuite) SetupSuite() {
 func (s *ChatServerTestSuite) TestMessagesE2E() {
     require := s.Require()
 
-    conn1, err := net.Dial("tcp", ":1337")
+    conn1, err := net.Dial("tcp", testAddress)
     require.NoError(err)
     client1 := sppp.NewConn(conn1)
     require.NoError(client1.WriteMsg([]byte("user1")))
@@ -36,7 +40,7 @@ func (s *ChatServerTestSuite) TestMessagesE2E() {
     // Wait a bit to ensure client1 is connected
     time.Sleep(5 * time.Millisecond)
 
-    conn2, err := net.Dial("tcp", ":1337")
+    conn2, err := net.Dial("tcp", testAddress)
     require.NoError(err)
     client2 := sppp.NewConn(conn2)
     require.NoError(client2.WriteMsg([]byte("user2")))
@@ -60,18 +64,12 @@ func (s *ChatServerTestSuite) TestMessagesE2E() {
 func (s *ChatServerTestSuite) TestStreamsE2E() {
    require := s.Require()
 
-   ln, err := net.Listen("tcp", ":1338")
-   require.NoError(err)
-
-   sln := sppp.NewSPPPListener(ln)
-   newServer(sln)
-
-   conn1, err := net.Dial("tcp", ":1338")
+   conn1, err := net.Dial("tcp", testAddress)
    require.NoError(err)
    client1 := sppp.NewConn(conn1)
    require.NoError(client1.WriteMsg([]byte("user1")))
 
-   conn2, err := net.Dial("tcp", ":1338")
+   conn2, err := net.Dial("tcp", testAddress)
    require.NoError(err)
    client2 := sppp.NewConn(conn2)
    require.NoError(client2.WriteMsg([]byte("user2")))
@@ -86,10 +84,7 @@ func (s *ChatServerTestSuite) TestStreamsE2E() {
 
    rs, err := client2.ReadStream()
    require.NoError(err)
-
-   meta, err := rs.ReadData()
-   require.NoError(err)
-   require.Equal("client 1 stream", string(meta))
+   require.Equal("client 1 stream", string(rs.Meta()))
 
    chunk, err := rs.ReadData()
    require.NoError(err)

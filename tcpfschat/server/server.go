@@ -129,12 +129,6 @@ func (srv *Server) handleConnection(cn *sppp.Conn) {
 }
 
 func (srv *Server) handleStream(rs sppp.ReadStream, cn *sppp.Conn) {
-    streamMeta, err := rs.ReadData()
-    if err != nil {
-        log.Printf("Could not read stream: %s", err)
-        return
-    }
-
     var wstreams []sppp.WriteStream
 
     srv.connsMx.Lock()
@@ -143,7 +137,7 @@ func (srv *Server) handleStream(rs sppp.ReadStream, cn *sppp.Conn) {
             continue
         }
 
-        ws, err := c.WriteStream(streamMeta)
+        ws, err := c.WriteStream(rs.Meta())
         if err != nil {
             log.Printf("Could not open write stream to connection: %s", err)
             continue

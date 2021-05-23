@@ -130,12 +130,7 @@ func sendFile(c *sppp.Conn, filePath string) {
 }
 
 func handleStream(s sppp.ReadStream) {
-	meta, err := s.ReadData()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	fileName := string(meta)
+	fileName := string(s.Meta())
 	fmt.Println("Client accepting:", fileName)
 
 	f, err := os.OpenFile(fileName, os.O_CREATE, 0777)
