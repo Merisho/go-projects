@@ -260,3 +260,72 @@ func (s *ConnTestSuite) TestStreamsClosing_WriterCloses() {
     _, err = rs.ReadData()
     s.Require().Equal(io.EOF, err)
 }
+
+func (s *ConnTestSuite) TestStreamReadAll() {
+    c1, c2 := net.Pipe()
+    writer := NewConn(c1)
+    reader := NewConn(c2)
+
+    ws, err := writer.WriteStream([]byte("test"))
+    s.Require().NoError(err)
+
+    err = ws.WriteData([]byte("chunk 1"))
+    s.Require().NoError(err)
+
+    err = ws.WriteData([]byte(" chunk 2"))
+    s.Require().NoError(err)
+
+    err = ws.WriteData([]byte(" chunk 3"))
+    s.Require().NoError(err)
+
+    writer.Close()
+
+    rs, err := reader.ReadStream()
+    s.Require().NoError(err)
+
+    msg, err := rs.ReadAll(0, 0)
+    s.Require().NoError(err)
+    s.Require().Equal("chunk 1 chunk 2 chunk 3", string(msg))
+}
+
+func (s *ConnTestSuite) TestStreamReadAll_Timeout() {
+    c1, c2 := net.Pipe()
+    writer := NewConn(c1)
+    reader := NewConn(c2)
+
+    ws, err := writer.WriteStream([]byte("test"))
+    s.Require().NoError(err)
+
+    err = ws.WriteData([]byte("chunk 1"))
+    s.Require().NoError(err)
+
+    rs, err := reader.ReadStream()
+    s.Require().NoError(err)
+
+    // Write stream above never closes, so timeout must be reached
+    msg, err := rs.ReadAll(50 * time.Millisecond, 0)
+    s.Require().Equal(TimeoutError, err)
+    s.Require().Nil(msg)
+}
+
+func (s *ConnTestSuite) TestStreamReadAll_BufferOverflow() {
+    c1, c2 := net.Pipe()
+    writer := NewConn(c1)
+    reader := NewConn(c2)
+
+    ws, err := writer.WriteStream([]byte("test"))
+    s.Require().NoError(err)
+
+    err = ws.WriteData(bytes.Repeat([]byte{42}, 2000))
+    s.Require().NoError(err)
+
+    ws.Close()
+
+    rs, err := reader.ReadStream()
+    s.Require().NoError(err)
+
+    // Write stream above never closes, so timeout must be reached
+    msg, err := rs.ReadAll(50 * time.Millisecond, 1000)
+    s.Require().Equal(BufferOverflowError, err)
+    s.Require().Nil(msg)
+}

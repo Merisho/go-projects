@@ -9,6 +9,7 @@ type ReadStream interface {
     io.ReadCloser
     ReadData() ([]byte, error)
     Meta() []byte
+    ReadAll(timeout time.Duration, bufferSizeLimit uint64) ([]byte, error)
 }
 
 func newReadStream(msgID uint64, meta []byte, readTimeout time.Duration) *readStream {
@@ -19,7 +20,7 @@ func newReadStream(msgID uint64, meta []byte, readTimeout time.Duration) *readSt
         readSig:         make(chan struct{}),
         timeoutOccurred: false,
         readTimeout:     readTimeout,
-        readTimeoutSig:  make(chan struct{}),
+        readTimeoutSig:  make(chan struct{}, 1),
         meta:            meta,
     }
 
@@ -106,4 +107,51 @@ func (s *readStream) feed(msg Message) {
 
 func (s *readStream) Meta() []byte {
     return s.meta
+}
+
+func (s *readStream) ReadAll(timeout time.Duration, bufferSizeLimit uint64) ([]byte, error) {
+    var buf []byte
+    var err error
+    finish := make(chan struct{})
+
+    go func() {
+        var b []byte
+        var e error
+        for b, e = s.ReadData(); e == nil; b, e = s.ReadData() {
+            if bufferSizeLimit > 0 && uint64(len(buf)) + uint64(len(b)) > bufferSizeLimit {
+                e = BufferOverflowError
+                break
+            }
+
+            buf = append(buf, b...)
+        }
+
+        if e != io.EOF {
+            err = e
+        }
+
+        close(finish)
+    }()
+
+    if timeout > 0 {
+        select {
+        case <- time.After(timeout):
+            s.readTimeoutSig <- struct{}{}
+            return nil, TimeoutError
+        case <- finish:
+            if err == nil {
+                return buf, nil
+            }
+
+            return nil, err
+        }
+    }
+
+    <- finish
+
+    if err == nil {
+        return buf, nil
+    }
+
+    return nil, err
 }

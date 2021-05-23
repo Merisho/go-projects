@@ -12,6 +12,7 @@ import (
 
 var (
     TimeoutError = errors.New("timeout")
+    BufferOverflowError = errors.New("buffer overflow")
 )
 
 func NewConn(c net.Conn) *Conn {
@@ -163,10 +164,7 @@ func (c *Conn) handleMessageEnd(msg Message) {
 
 func (c *Conn) deleteReadStreamAfterTimeout(s *readStream) {
     go func() {
-        _, ok := <- s.ReadTimeoutWait()
-        if !ok {
-            return
-        }
+        <- s.ReadTimeoutWait()
         
         c.writeTimeout(s.msgID)
         c.removeReadStream(s.msgID)
