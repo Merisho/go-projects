@@ -1,6 +1,7 @@
 package sppp
 
 import (
+    "bytes"
     "errors"
     "github.com/merisho/tcp-fs-chat/internal/csdt"
     "log"
@@ -10,26 +11,29 @@ import (
     "time"
 )
 
+const (
+    maxMessageSize = 65536
+)
+
 var (
     TimeoutError = errors.New("timeout")
     BufferOverflowError = errors.New("buffer overflow")
+    textMessageStreamMeta = []byte("_textmessage_")
 )
 
 func NewConn(c net.Conn) *Conn {
     conn := &Conn{
         Conn:               c,
-        textMsgChan:        make(chan Message, 1024),
+        textMsgChan:        make(chan []byte, 1024),
         mainErrChan:        make(chan error),
         newReadStreamsChan: make(chan *readStream, 128),
         readStreams:        make(map[uint64]*readStream),
         msgReadTimeout:     5 * time.Second,
-        txtBuffer:          NewTextMessageBuffer(),
         rand:               rand.New(rand.NewSource(time.Now().Unix())),
         finishErr:          csdt.NewValue(),
     }
 
     conn.startReading()
-    conn.startTimeoutsHandling()
 
     return conn
 }
@@ -37,9 +41,8 @@ func NewConn(c net.Conn) *Conn {
 type Conn struct {
     net.Conn
 
-    textMsgChan    chan Message
+    textMsgChan    chan []byte
     msgReadTimeout time.Duration
-    txtBuffer *TextMessageBuffer
 
     streamReadTimeout time.Duration
     streamsMutex       sync.Mutex
@@ -51,17 +54,17 @@ type Conn struct {
     finishErr   *csdt.Value
 }
 
-func (c *Conn) ReadMsg() (Message, error) {
+func (c *Conn) ReadMsg() ([]byte, error) {
     finishErr := c.finishErr.Value()
     if finishErr != nil {
-        return Message{}, finishErr.(error)
+        return nil, finishErr.(error)
     }
 
     select {
     case m := <- c.textMsgChan:
         return m, nil
     case <- c.mainErrChan:
-        return Message{}, c.finishErr.Value().(error)
+        return nil, c.finishErr.Value().(error)
     }
 }
 
@@ -111,28 +114,13 @@ func (c *Conn) startReading() {
             }
 
             switch msg.Type {
-            case TextType:
-                c.handleTextMessage(msg)
             case StreamType:
                 c.handleStreamMessage(msg)
             case EndType:
-                c.handleMessageEnd(msg)
+                c.handleEnd(msg)
             }
         }
     }()
-}
-
-func (c *Conn) startTimeoutsHandling() {
-    go func() {
-        txtMsgTimeouts := c.txtBuffer.Timeouts()
-        for id := range txtMsgTimeouts {
-            c.writeTimeout(id)
-        }
-    }()
-}
-
-func (c *Conn) handleTextMessage(msg Message) {
-    c.txtBuffer.Message(msg, c.msgReadTimeout)
 }
 
 func (c *Conn) handleStreamMessage(msg Message) {
@@ -143,22 +131,22 @@ func (c *Conn) handleStreamMessage(msg Message) {
     if ok {
         s.feed(msg)
     } else {
-        s := newReadStream(msg.ID, msg.Content, c.streamReadTimeout)
+        meta := msg.Content
+        s := newReadStream(msg.ID, meta, c.streamReadTimeout)
 
         c.deleteReadStreamAfterTimeout(s)
-        c.newReadStreamsChan <- s
+
+        if bytes.Equal(meta, textMessageStreamMeta) {
+            c.readAll(s)
+        } else {
+            c.newReadStreamsChan <- s
+        }
 
         c.readStreams[msg.ID] = s
     }
 }
 
-func (c *Conn) handleMessageEnd(msg Message) {
-    m := c.txtBuffer.EndMessage(msg)
-    if !m.Empty() {
-        c.textMsgChan <- m
-        return
-    }
-
+func (c *Conn) handleEnd(msg Message) {
     c.removeReadStream(msg.ID)
 }
 
@@ -168,6 +156,19 @@ func (c *Conn) deleteReadStreamAfterTimeout(s *readStream) {
         
         c.writeTimeout(s.msgID)
         c.removeReadStream(s.msgID)
+    }()
+}
+
+func (c *Conn) readAll(s *readStream) {
+    go func() {
+        defer c.removeReadStream(s.msgID)
+
+        b, err := s.ReadAll(c.msgReadTimeout, maxMessageSize)
+        if err != nil {
+            return
+        }
+
+        c.textMsgChan <- b
     }()
 }
 
@@ -194,19 +195,17 @@ func (c *Conn) writeTimeout(id uint64) {
 }
 
 func (c *Conn) WriteMsg(rawMsg []byte) error {
-    id := c.rand.Uint64()
-    msgs := SplitIntoMessages(id, TextType, rawMsg)
-    msgs = append(msgs, NewMessage(id, EndType, nil))
-
-    for _, m := range msgs {
-        rawMsg := m.Marshal()
-        _, err := c.Write(rawMsg[:])
-        if err != nil {
-            return err
-        }
+    ws, err := c.WriteStream(textMessageStreamMeta)
+    if err != nil {
+        return err
     }
 
-    return nil
+    err = ws.WriteData(rawMsg)
+    if err != nil {
+        return err
+    }
+
+    return ws.Close()
 }
 
 func (c *Conn) WriteStream(meta []byte) (WriteStream, error) {

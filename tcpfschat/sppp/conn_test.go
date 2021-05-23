@@ -23,36 +23,26 @@ func (s *ConnTestSuite) SetupSuite() {
     s.rand = rand.New(rand.NewSource(time.Now().Unix()))
 }
 
-func (s *ConnTestSuite) TestMsgRead() {
-    c1, c2 := net.Pipe()
-    reader := NewConn(c2)
+func (s *ConnTestSuite) TestReadWriteMessage() {
+    writer, reader := pipe()
 
-    id := s.rand.Uint64()
-
-    rawMsg := NewMessage(id, TextType, []byte("test")).Marshal()
-    _, _ = c1.Write(rawMsg[:])
-
-    rawMsg = NewMessage(id, TextType, []byte(" message")).Marshal()
-    _, _ = c1.Write(rawMsg[:])
-
-    rawMsg = NewMessage(id, EndType, nil).Marshal()
-    _, _ = c1.Write(rawMsg[:])
+    rawMsg := bytes.Repeat([]byte("test"), 1024)
+    err := writer.WriteMsg(rawMsg)
+    s.Require().NoError(err)
 
     msg, err := reader.ReadMsg()
     s.Require().NoError(err)
-    s.Require().Equal("test message", string(msg.Content))
+    s.Require().Equal(rawMsg, msg)
 }
 
 func (s *ConnTestSuite) TestMsgReadTimeout() {
-    c1, c2 := net.Pipe()
-    reader := NewConn(c2)
+    reader, writer := pipe()
     reader.SetMessageReadTimeout(50 * time.Millisecond)
 
-    id := s.rand.Uint64()
-    rawMsg := NewMessage(id, TextType, []byte("test")).Marshal()
-    _, _ = c1.Write(rawMsg[:])
+    _, err := writer.WriteStream(textMessageStreamMeta)
+    s.Require().NoError(err)
 
-    msgChan := make(chan Message)
+    msgChan := make(chan []byte)
     go func() {
        m, _ := reader.ReadMsg()
        msgChan <- m
@@ -63,14 +53,6 @@ func (s *ConnTestSuite) TestMsgReadTimeout() {
        s.Fail("Must not receive a message")
     case <- time.After(60 * time.Millisecond):
     }
-
-    var rawTimeoutResponse [1024]byte
-    _, _ = c1.Read(rawTimeoutResponse[:])
-
-    timeoutRes, err := UnmarshalMessage(rawTimeoutResponse)
-    s.Require().NoError(err)
-    s.Require().EqualValues(TimeoutType, timeoutRes.Type)
-    s.Require().Equal(id, timeoutRes.ID)
 }
 
 func (s *ConnTestSuite) TestReadStream() {
@@ -146,7 +128,7 @@ func (s *ConnTestSuite) TestHandleInvalidMessage() {
     rawMsg := []byte("a garbage message")
     _, _ = c1.Write(rawMsg[:])
 
-    msgChan := make(chan Message)
+    msgChan := make(chan []byte)
     go func() {
         m, _ := reader.ReadMsg()
         msgChan <- m
@@ -164,18 +146,6 @@ func (s *ConnTestSuite) TestHandleInvalidMessage() {
     timeoutRes, err := UnmarshalMessage(rawInvalidMsgResponse)
     s.Require().NoError(err)
     s.Require().EqualValues(ErrorType, timeoutRes.Type)
-}
-
-func (s *ConnTestSuite) TestWriteMessage() {
-    writer, reader := pipe()
-
-    rawMsg := bytes.Repeat([]byte("test"), 1024)
-    err := writer.WriteMsg(rawMsg)
-    s.Require().NoError(err)
-
-    msg, err := reader.ReadMsg()
-    s.Require().NoError(err)
-    s.Require().Equal(rawMsg, msg.Content)
 }
 
 func (s *ConnTestSuite) TestWriteStream() {

@@ -50,7 +50,7 @@ func (s *ChatServerTestSuite) TestMessagesE2E() {
 
     msg, err := client1.ReadMsg()
     require.NoError(err)
-    require.Equal("user2: client 2", string(msg.Content))
+    require.Equal("user2: client 2", string(msg))
 
     require.Equal(0, client1.MsgCount())
 

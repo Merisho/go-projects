@@ -58,7 +58,7 @@ func (srv *Server) handleConnection(cn *sppp.Conn) {
             return
         }
 
-        username := metaMsg.Content
+        username := metaMsg
 
         for {
            msg, err := cn.ReadMsg()
@@ -76,7 +76,7 @@ func (srv *Server) handleConnection(cn *sppp.Conn) {
             }
 
            m := append(username, ": "...)
-           m = append(m, msg.Content...)
+           m = append(m, msg...)
            srv.connsMx.Lock()
            for _, c := range srv.conns {
                if c == cn {
