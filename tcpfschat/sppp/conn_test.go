@@ -26,7 +26,7 @@ func (s *ConnTestSuite) SetupSuite() {
 func (s *ConnTestSuite) TestReadWriteMessage() {
     writer, reader := pipe()
 
-    rawMsg := bytes.Repeat([]byte("test"), 1024)
+    rawMsg := bytes.Repeat([]byte("test"), 10 * 1024)
     err := writer.WriteMsg(rawMsg)
     s.Require().NoError(err)
 
@@ -109,7 +109,7 @@ func (s *ConnTestSuite) TestReadStreamTimeout() {
        _, err = stream.ReadData()
        s.Require().Equal(TimeoutError, err)
 
-       var timeoutRes [1024]byte
+       var timeoutRes [totalMsgSize]byte
        _, _ = c1.Read(timeoutRes[:])
        timeoutMsg, err := UnmarshalMessage(timeoutRes)
        s.Require().NoError(err)
@@ -140,7 +140,7 @@ func (s *ConnTestSuite) TestHandleInvalidMessage() {
     case <- time.After(60 * time.Millisecond):
     }
 
-    var rawInvalidMsgResponse [1024]byte
+    var rawInvalidMsgResponse [totalMsgSize]byte
     _, _ = c1.Read(rawInvalidMsgResponse[:])
 
     timeoutRes, err := UnmarshalMessage(rawInvalidMsgResponse)

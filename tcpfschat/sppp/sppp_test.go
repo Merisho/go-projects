@@ -60,7 +60,7 @@ func (s *SPPPTestSuite) TestUint64ToBytes() {
 
 func (s *SPPPTestSuite) TestUnmarshal() {
    headerSize := 17
-   var rawMsg [1024]byte
+   var rawMsg [totalMsgSize]byte
    size := uint64(100)
    expectedMsg := strings.Repeat("a", int(size))
 
@@ -82,7 +82,7 @@ func (s *SPPPTestSuite) TestUnmarshal() {
 }
 
 func (s *SPPPTestSuite) TestUnmarshalBadMessage() {
-    var badMsg [1024]byte
+    var badMsg [totalMsgSize]byte
     copy(badMsg[:], "a garbage message")
 
     msg, err := UnmarshalMessage(badMsg)
@@ -93,7 +93,7 @@ func (s *SPPPTestSuite) TestUnmarshalBadMessage() {
 
 func (s *SPPPTestSuite) TestMarshal() {
     headerSize := 17
-    var rawMsg [1024]byte
+    var rawMsg [totalMsgSize]byte
     actualMsgSize := len(rawMsg) - headerSize
     actualMsg := strings.Repeat("a", actualMsgSize)
 

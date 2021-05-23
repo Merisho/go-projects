@@ -96,7 +96,7 @@ func (c *Conn) SetStreamReadTimeout(d time.Duration) {
 
 func (c *Conn) startReading() {
     go func() {
-        var b [1024]byte
+        var b [totalMsgSize]byte
         for {
             _, err := c.Conn.Read(b[:])
             if err != nil {

@@ -41,7 +41,7 @@ type readStream struct {
 }
 
 func (s *readStream) ReadData() ([]byte, error) {
-    b := make([]byte, 2048)
+    b := make([]byte, totalMsgSize)
     n, err := s.Read(b)
     if err != nil {
         return nil, err

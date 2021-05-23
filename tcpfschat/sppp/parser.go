@@ -4,15 +4,15 @@ import (
     "errors"
 )
 
-// The message is 1024 bytes
+// The message is 8192 bytes
 // 1 byte - type
 // 8 bytes - size
 // 8 bytes - ID
-// 1007 bytes - content
+// 8175 bytes - content
 
 const (
     headerSize = 17
-    totalMsgSize = 1024
+    totalMsgSize = 8192
     msgContentSize = totalMsgSize - headerSize
 )
 
@@ -36,7 +36,7 @@ type Message struct {
     Content []byte
 }
 
-func UnmarshalMessage(msg [1024]byte) (m Message, err error) {
+func UnmarshalMessage(msg [totalMsgSize]byte) (m Message, err error) {
     header := msg[:headerSize]
     msgType := header[0]
 
@@ -66,8 +66,8 @@ func invalidMessage(msgType byte, size uint64) bool {
     return size > totalMsgSize - headerSize || msgType >= maxMessageTypeIota
 }
 
-func (m Message) Marshal() [1024]byte {
-    var b [1024]byte
+func (m Message) Marshal() [totalMsgSize]byte {
+    var b [totalMsgSize]byte
     b[0] = byte(m.Type)
 
     size := Uint64ToBytes(m.Size)
