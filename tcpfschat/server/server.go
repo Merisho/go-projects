@@ -68,11 +68,12 @@ func (srv *Server) handleConnection(cn *sppp.Conn) {
                     continue
                 }
 
-                if err == io.EOF {
+                if err == io.EOF || err == io.ErrUnexpectedEOF {
                     return
                 }
 
                 log.Println(err)
+                return
             }
 
            m := append(username, ": "...)
@@ -104,11 +105,12 @@ func (srv *Server) handleConnection(cn *sppp.Conn) {
                     continue
                 }
 
-                if err == io.EOF {
+                if err == io.EOF || err == io.ErrUnexpectedEOF {
                     return
                 }
 
                 log.Println(err)
+                return
             }
 
             go srv.handleStream(rs, cn)

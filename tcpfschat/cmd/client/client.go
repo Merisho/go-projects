@@ -15,11 +15,11 @@ import (
 )
 
 func main() {
-	if len(os.Args) < 2 {
-		log.Fatal("host argument is missing")
+	host := "localhost"
+	if len(os.Args) >= 2 {
+		host = os.Args[1]
 	}
 
-	host := os.Args[1]
 	port := getPort()
 
 	d, err := net.Dial("tcp", fmt.Sprintf("%s:%d", host, port))
@@ -34,15 +34,14 @@ func main() {
 			msg, err := c.ReadMsg()
 			if err != nil {
 				if err == io.EOF {
-					log.Println("Connection closed")
+					fmt.Println("Connection closed")
 					os.Exit(0)
 				}
 
 				log.Fatal(err)
 			}
 
-			now := time.Now().Format(time.RFC822Z)
-			fmt.Println(now, string(msg.Content))
+			printMsg(string(msg))
 		}
 	}()
 
@@ -51,7 +50,7 @@ func main() {
 			s, err := c.ReadStream()
 			if err != nil {
 				if err == io.EOF {
-					log.Println("Connection closed")
+					fmt.Println("Connection closed")
 					os.Exit(0)
 				}
 
@@ -62,6 +61,8 @@ func main() {
 		}
 	}()
 
+	fmt.Printf("To send a file:\n\t/f <full path>\n\n")
+
 	fmt.Println("Your nickname:")
 	processOutgoingMessages(c)
 }
@@ -71,7 +72,7 @@ func processOutgoingMessages(c *sppp.Conn) {
 	for {
 		b, _, err := r.ReadLine()
 		if err != nil {
-			log.Fatal(err)
+			printServiceMsg("Could not read stdin:", err.Error())
 		}
 
 		if string(b[:2]) == "/f" {
@@ -79,6 +80,10 @@ func processOutgoingMessages(c *sppp.Conn) {
 		} else {
 			err = c.WriteMsg(b)
 			if err != nil {
+				if err == io.ErrClosedPipe {
+					return
+				}
+
 				log.Fatal(err)
 			}
 		}
@@ -89,27 +94,23 @@ func sendFile(c *sppp.Conn, filePath string) {
 	filePath = strings.TrimSpace(filePath)
 
 	fileName := filepath.Base(filePath)
-	fmt.Println("Sending file", fileName)
+	printServiceMsg("Sending file", fileName)
 
 	f, err := os.Open(filePath)
 	if err != nil {
-		log.Fatal(err)
+		printServiceMsg("Cannot open the file:", filePath, err.Error())
 	}
-	defer func() {
-		err := f.Close()
-		if err != nil {
-			log.Fatal(err)
-		}
-	}()
+	defer f.Close()
 
 	ws, err := c.WriteStream([]byte(fileName))
 	if err != nil {
-		log.Fatalf("Could not send file: %s", err)
+		printServiceMsg("Could not send file:", err.Error())
+		return
 	}
 	defer func() {
 		err := ws.Close()
 		if err != nil {
-			log.Fatalf("Could not send write stream: %s", err)
+			printServiceMsg("Could not close write stream:", err.Error())
 		}
 	}()
 
@@ -125,22 +126,23 @@ func sendFile(c *sppp.Conn, filePath string) {
 	}
 
 	if err != io.EOF {
-		log.Fatal(err)
+		printServiceMsg("Could not send file successfully:", err.Error())
 	}
 }
 
 func handleStream(s sppp.ReadStream) {
 	fileName := string(s.Meta())
-	fmt.Println("Client accepting:", fileName)
+	printServiceMsg("Client accepting:", fileName)
 
 	f, err := os.OpenFile(fileName, os.O_CREATE, 0777)
 	if err != nil {
-		log.Fatal(err)
+		printServiceMsg("Cannot write to file:", fileName, err.Error())
+		return
 	}
 	defer func() {
 		err := f.Close()
 		if err != nil {
-			log.Fatal(err)
+			printServiceMsg("Error writing to a file:", fileName, err.Error())
 		}
 	}()
 
@@ -148,17 +150,18 @@ func handleStream(s sppp.ReadStream) {
 	for err == nil {
 		_, err = f.Write(b)
 		if err != nil {
-			log.Fatal(err)
+			printServiceMsg("Error writing to a file:", fileName, err.Error())
+			return
 		}
 
 		b, err = s.ReadData()
 	}
 
 	if err != io.EOF {
-		log.Fatal(err)
+		printServiceMsg("Error downloading a file:", fileName, err.Error())
 	}
 
-	fmt.Println("Download finished:", fileName)
+	printServiceMsg("Download finished:", fileName)
 }
 
 func getPort() uint16 {
@@ -173,4 +176,12 @@ func getPort() uint16 {
 	}
 
 	return port
+}
+
+func printServiceMsg(m ...string) {
+	printMsg(append([]string{"========== "}, m...)...)
+}
+
+func printMsg(m ...string) {
+	fmt.Printf("[%s] %s\n", time.Now().Format(time.Kitchen), strings.Join(m, " "))
 }
