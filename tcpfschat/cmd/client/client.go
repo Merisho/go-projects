@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -64,7 +65,17 @@ func main() {
 	fmt.Printf("To send a file:\n\t/f <full path>\n\n")
 
 	fmt.Println("Your nickname:")
-	processOutgoingMessages(c)
+	go processOutgoingMessages(c)
+
+	s := make(chan os.Signal, 1)
+	signal.Notify(s, os.Interrupt, os.Kill)
+
+	<- s
+
+	err = c.Close()
+	if err != nil {
+		log.Println(err)
+	}
 }
 
 func processOutgoingMessages(c *sppp.Conn) {
