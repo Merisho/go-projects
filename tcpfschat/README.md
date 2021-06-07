@@ -4,7 +4,7 @@ This is merely a chat implemented over TCP with capability of transferring files
 Files are transferred asynchronously, so while the one is being sent, you can still send and receive messages.
 A TCP connection is multiplexed with the help of SPPP (see below).
 
-Clients automatically receive files that are being sent.
+Clients automatically receive files that are sent.
 All the files are downloaded in the directory from which the client executable is started.
 
 ## Server
