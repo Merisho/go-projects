@@ -35,4 +35,4 @@ On the recipient side:
 The timeout is reached when read stream has not received any data in specified amount of time.
 
 SPPP is developed to support 2 types of data: bare streams and atomic messages (which is just an abstraction over streams).
-The latter has its own timeout for entire message read, so even if read stream receives data chunks in time, the entire message read may still be not completed in time.
+The latter has its own timeout for entire message read (timeout for receiving `end` chunk), so even if read stream receives data chunks in time, the entire message read may still be not completed in time.
