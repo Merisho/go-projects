@@ -30,7 +30,7 @@ It is stream based, so whenever you write anything to SPPP connection, internall
 
 On the recipient side:
 
-1. once there is an incoming stream, the read stream is create
+1. once there is an incoming stream, the read stream is created
 2. the read stream is read till the `end` chunk or till the read timeout is reached.
 The timeout is reached when read stream has not received any data in specified amount of time.
 
